@@ -1,5 +1,6 @@
 """
 Randomly takes two-week trade sequences from Andromeda and saves in a file
+
 CLI parameters:
     "-a", "--andromeda": path to the andromeda files storage; I take <TICKER>_full_data.csv files from there
     "-s", "--samples", type=int: number of selected data samples. Data sample is a random two-week period of trade
@@ -7,8 +8,15 @@ CLI parameters:
     "-y", "--year_since": starting year; older trades are disregarded
     "-t", "--target": target file for saving samples
 
-memory cache for data since 2017 -> 11 GB RAM
-100k samples: 3.4 G data file
+Example:
+    --andromeda /opt/dane/ssd/data_cache/andromeda \
+    --year_since 2017 \
+    --samples 100000 \
+    --target /opt/dane_synology/some_output_file.csv
+
+Memory demand:
+    memory cache for data since 2017 -> 11 GB RAM
+    100k samples: 3.4 G data file
 """
 import argparse
 import csv
