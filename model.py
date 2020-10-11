@@ -1,3 +1,4 @@
+import os
 import random
 
 import torch
@@ -26,7 +27,7 @@ class Population:
         self.new_population_weights = None
         self.new_population_biases = None
         self.data_stream = data_stream
-        self.old_population_evaluations = self._evaluate_population(
+        self.population_evaluations = self._evaluate_population(
             self.population_weights,
             self.population_biases,
             self.data_stream)
@@ -66,17 +67,18 @@ class Population:
                     if random.random() < mutation_probability:
                         if _coin_toss():
                             if _coin_toss():
-                                self.new_population_weights[i, j, k] = self.new_population_weights[i, j, k] - 0.0001
+                                # TODO consider other mutation methods
+                                self.new_population_weights[i, j, k] -= 0.0001
                             else:
-                                self.new_population_weights[i, j, k] = self.new_population_weights[i, j, k] + 0.0001
+                                self.new_population_weights[i, j, k] += 0.0001
         for i in range(self.population_size):
             for j in range(self.model_size):
                 if random.random() < mutation_probability:
                     if _coin_toss():
                         if _coin_toss():
-                            self.new_population_biases[i, j] = self.new_population_biases[i, j] - 0.0001
+                            self.new_population_biases[i, j] -= 0.0001
                         else:
-                            self.new_population_biases[i, j] = self.new_population_biases[i, j] + 0.0001
+                            self.new_population_biases[i, j] += 0.0001
 
     def _crossing_over_in_new_population(self, co_probability=0.4):
         """
@@ -147,7 +149,7 @@ class Population:
         # - sequence index; 0 == old, 1 == new
         # - index in the population
         # - evaluation value
-        old_evaluations = [[0, index, value] for index, value in enumerate(self.old_population_evaluations)]
+        old_evaluations = [[0, index, value] for index, value in enumerate(self.population_evaluations)]
         new_evaluations = [[1, index, value] for index, value in enumerate(self.new_population_evaluations)]
         # Sort both lists of evaluations w.r.t. the evaluation, descending
         old_evaluations.sort(key=lambda x: x[2], reverse=True)
@@ -177,9 +179,9 @@ class Population:
         self.population_weights = torch.cat((weights_from_old_indexes, weights_from_new_indexes), 0)
         self.population_biases = torch.cat((biases_from_old_indexes, biases_from_new_indexes), 0)
         # Now the merged population becomes the "old" one; updating evaluations
-        old_evaluations_values = [self.old_population_evaluations[index] for index in merge_indexes_old]
+        old_evaluations_values = [self.population_evaluations[index] for index in merge_indexes_old]
         new_evaluations_values = [self.new_population_evaluations[index] for index in merge_indexes_new]
-        self.old_population_evaluations = old_evaluations_values + new_evaluations_values
+        self.population_evaluations = old_evaluations_values + new_evaluations_values
         self.new_population_weights = None
         self.new_population_biases = None
         self.new_population_evaluations = None
@@ -188,10 +190,18 @@ class Population:
         # Create a new generation and evaluate it
         self.new_generation()
         # Take the best result so far, to return it at the end
-        best_result_so_far = max(self.old_population_evaluations + self.new_population_evaluations)
+        best_result_so_far = max(self.population_evaluations + self.new_population_evaluations)
         # Merge old and new generations, pick the best ones; prefer newer models over old ones
         self._merge_populations()
         return best_result_so_far
 
     def save(self, save_path):
-        pass  # TODO implement
+        """
+        Saves the best model (i.e. indexed as 0) to the save path, with names 'weights.pt' and 'biases.pt'
+        :param save_path: Directory path to save the model
+        :return: None
+        """
+        # There is no argmax for lists in Python(!)
+        best_model_index = max(range(len(self.population_evaluations)), key=lambda i: self.population_evaluations[i])
+        torch.save(self.population_weights[best_model_index], os.path.join(save_path, 'weights.pt'))
+        torch.save(self.population_biases[best_model_index], os.path.join(save_path, 'biases.pt'))
