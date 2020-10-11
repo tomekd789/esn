@@ -12,7 +12,7 @@ Example:
     --andromeda /opt/dane/ssd/data_cache/andromeda \
     --year_since 2017 \
     --samples 100000 \
-    --target /opt/dane_synology/some_output_file.csv
+    --target /opt/dane_synology/esn_data_100k.csv.csv
 
 Memory demand:
     memory cache for data since 2017 -> 11 GB RAM
@@ -54,22 +54,19 @@ def get_all_andromeda_tickers(andromeda_path):
 def main(args):  # pylint: disable=missing-function-docstring
     all_andromeda_tickers = get_all_andromeda_tickers(args.andromeda)
     generated_samples_counter = 0
-    progress_logger = logger(frequency=1000, maximum=args.samples)
+    progress_logger = logger(frequency=100, maximum=args.samples)
     trade_data_buffer = {}  # Buffer to accumulate data in memory for future reuse
     with open(args.target, 'w') as target_file_handle:
         target_file_writer = csv.writer(target_file_handle, quoting=csv.QUOTE_MINIMAL)
-        target_file_writer.writerow(['ticker', 'date', 'prediction', 'ground_truth'])
-        while generated_samples_counter < args.samples:
+        while generated_samples_counter <= args.samples:
             progress_logger()
-            ticker = random.choice(all_andromeda_tickers)
+            ticker = random.choice(all_andromeda_tickers)  # Get a random ticker
             # Populate the trade data buffer with ticker data if not yet exists
             if ticker not in trade_data_buffer.keys():
                 ticker_file = os.path.join(args.andromeda, ticker + '_full_data.csv')
                 trade_data_buffer[ticker] = []
                 with open(ticker_file) as ticker_file_handle:
-                    cnt = 0
                     for line in ticker_file_handle:
-                        cnt += 1
                         try:
                             trade_year = int(line[:4])
                         except ValueError:  # Ignore header line
@@ -83,7 +80,10 @@ def main(args):  # pylint: disable=missing-function-docstring
                 continue
             start_point = random.randint(0, ticker_length - TWO_WEEKS)
             sample = trade_data_buffer[ticker][start_point: start_point + TWO_WEEKS]
-            target_file_writer.writerow(sample)
+            # NORMALIZE the sample, so that the first trade value is 1.0
+            trade_start_value = sample[0]
+            normalized_sample = [value / trade_start_value for value in sample]
+            target_file_writer.writerow(normalized_sample)
             generated_samples_counter += 1
 
 
