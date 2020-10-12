@@ -3,21 +3,30 @@ import random
 
 import torch
 
+MUTATION_FUNCTIONS = [
+    lambda x: x / 2,
+    lambda x: x * 2,
+    lambda x: x - 0.5,
+    lambda x: x + 0.5
+]
 
-def _coin_toss():
-    if random.random() > 0.5:
-        return True
-    return False
+
+def _get_mutation_function(mutation_probability):
+    if random.random() < mutation_probability:
+        return lambda x: x
+    else:
+        return random.choice(MUTATION_FUNCTIONS)
 
 
 class Population:
     """
     Model candidates
     """
-    def __init__(self, device, population_size, model_size, data_stream):
+    def __init__(self, device, population_size, model_size, max_evaluation_steps, data_stream):
         self.device = device
         self.population_size = population_size
         self.model_size = model_size
+        self.max_evaluation_steps = max_evaluation_steps
         # Random initialization, uniform distribution from [0, 1)
         self.population_weights = torch.rand([population_size, model_size, model_size], device=device)
         self.population_biases = torch.rand([population_size, model_size], device=device)
@@ -64,21 +73,14 @@ class Population:
         for i in range(self.population_size):
             for j in range(self.model_size):
                 for k in range(self.model_size):
-                    if random.random() < mutation_probability:
-                        if _coin_toss():
-                            if _coin_toss():
-                                # TODO consider other mutation methods
-                                self.new_population_weights[i, j, k] -= 0.0001
-                            else:
-                                self.new_population_weights[i, j, k] += 0.0001
+                    mutation_function = _get_mutation_function(mutation_probability)
+                    value_before_mutation = self.new_population_weights[i, j, k]
+                    self.new_population_weights[i, j, k] = mutation_function(value_before_mutation)
         for i in range(self.population_size):
             for j in range(self.model_size):
-                if random.random() < mutation_probability:
-                    if _coin_toss():
-                        if _coin_toss():
-                            self.new_population_biases[i, j] -= 0.0001
-                        else:
-                            self.new_population_biases[i, j] += 0.0001
+                mutation_function = _get_mutation_function(mutation_probability)
+                value_before_mutation = self.new_population_biases[i, j]
+                self.new_population_biases[i, j] = mutation_function(value_before_mutation)
 
     def _crossing_over_in_new_population(self, co_probability=0.4):
         """
@@ -127,6 +129,63 @@ class Population:
                 self.new_population_biases[second_index][:co_split_index] = saved_left_sequence
                 self.new_population_biases[first_index][co_split_index:] = saved_right_sequence
 
+    def _evaluate_sequence(self, weights, biases, sequence):
+        """
+        Evaluate a single sequence
+        :param weights: population models' weights
+        :param biases: population models' biases
+        :param sequence: single trade sequence
+        :return: population-sized tensor of trade results
+        """
+        # Array of internal states for each model, zero-initialized
+        internal_states = torch.zeros(self.population_size, self.model_size).to(self.device)
+        # Models may have current sequence pointers set individually
+        sequence_pointers = torch.zeros(self.population_size).to(self.device)
+        # Flags to mark if models predict a trade (individually)
+        is_trade = torch.zeros(self.population_size).to(self.device)
+        # Pointers for trade start
+        trade_start_pointers = torch.zeros(self.population_size).to(self.device)
+        # Flags to take long position (buy)
+        take_long_position = torch.zeros(self.population_size).to(self.device)
+        # Flags to take long position (buy)
+        take_short_position = torch.zeros(self.population_size).to(self.device)
+        # Perform RNN steps with all models in parallel (leverage the CUDA SIMD architecture)
+        for _ in range(self.max_evaluation_steps):
+            # For each internal state assign its 0-th element with the sequence value according to sequence pointers
+            pointers = sequence_pointers.tolist()
+            for index, pointer in enumerate(pointers):
+                internal_states[index][0] = sequence[int(pointer)].astype(float)
+
+            """              THE CORE OPERATION. Efficiency is in much demand here              """
+            # Scalar multiply internal states by corresponding models, add biases
+            internal_states = torch.einsum("bn, bmn -> bm", internal_states, weights) + biases
+
+            # The last three state values have a special meaning:
+            #     s[-3]: progress input pointer
+            #     s[-2]: take long position (buy)
+            #     s[-1] : take short position (sell)
+            # Update trade-related values:
+            # if not is_trade:
+            #     buy = s[-2] >= 1.0
+            #     sell = s[-1] >= 1.0
+            #     if buy xor sell:
+            #         is_trade = true
+            #         trade_start_pointer = sequence_pointer
+            #         if buy:
+            #             take_long_position = True
+            #         if sell:
+            #             take_short_position = True
+            # Check for sequence pointer increment
+            # if s[-3] >= 1.0:
+            #     sequence_pointer += 1
+            #     if sequence_pointer > len(sequence):
+            #         sequence_pointer = len(sequence)
+            # Check if all trades have been predicted
+        # Calculate trades results
+        trades_results = torch.zeros(self.population_size).to(self.device)
+        # TODO implement trade result calculations
+        return trades_results
+
     def _evaluate_population(self, weights, biases, data_stream):
         """
         The main evaluation method; takes a population (as weights & biases), the data stream,
@@ -136,7 +195,12 @@ class Population:
         :param data_stream: the stream of data batches, as lists of numpy arrays
         :return: population-sized list of trade results
         """
-        return [random.random() for _ in range(weights.shape[0])]  # TODO implement
+        batch = data_stream.__next__()
+        # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
+        accumulated_evaluation = torch.zeros(weights.shape[0]).to(self.device)
+        for sequence in batch:
+            accumulated_evaluation += self._evaluate_sequence(weights, biases, sequence)
+        return accumulated_evaluation.tolist()
 
     def _merge_populations(self):
         """
@@ -156,17 +220,17 @@ class Population:
         new_evaluations.sort(key=lambda x: x[2], reverse=True)
         # Merge indexes from best to worst, preferring new ones, until population size is reached
         merge_indexes = []
-        old_evaluations_copy = old_evaluations.copy()  # Full lists will be useful further
-        new_evaluations_copy = new_evaluations.copy()
+        max_value_pointer_old = 0
+        max_value_pointer_new = 0
         while len(merge_indexes) < self.population_size:
-            remaining_old_sequence_max_value = old_evaluations_copy[0][2]
-            remaining_new_sequence_max_value = new_evaluations_copy[0][2]
+            remaining_old_sequence_max_value = old_evaluations[max_value_pointer_old][2]
+            remaining_new_sequence_max_value = new_evaluations[max_value_pointer_new][2]
             if remaining_old_sequence_max_value > remaining_new_sequence_max_value:
-                merge_indexes.append(old_evaluations_copy[0])  # Take the head of the list
-                old_evaluations_copy = old_evaluations_copy[1:]  # Discard after use
+                merge_indexes.append(old_evaluations[max_value_pointer_old])
+                max_value_pointer_old += 1  # Since the list has been sorted, it is enough to move the pointer
             else:
-                merge_indexes.append(new_evaluations_copy[0])
-                new_evaluations_copy = new_evaluations_copy[1:]
+                merge_indexes.append(new_evaluations[max_value_pointer_new])
+                max_value_pointer_new += 1
         # Now take only tensor indexes, "unzipping" with regard to old/new
         merge_indexes_old = [tuple[1] for tuple in merge_indexes if tuple[0] == 0]
         merge_indexes_new = [tuple[1] for tuple in merge_indexes if tuple[0] == 1]

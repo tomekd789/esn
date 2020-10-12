@@ -12,7 +12,7 @@ def _basic_data_stream(data_file):
     dataset = np.array(dataset_pd, dtype='float32')
     while True:
         # Iterate the data file and yield records one by one
-        for index in range(dataset.shape()[0]):
+        for index in range(dataset.shape[0]):
             yield dataset[index]
         # After the iteration is finished, reshuffle
         np.random.shuffle(dataset)
