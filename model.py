@@ -138,6 +138,8 @@ class Population:
         trade_start_price = sequence[trade_start_pointer]
         # We start this calculation with $1.00 and buy at the trade start price
         # To simulate continuous trading, we multiply the outcomes from single sequences
+        if trade_start_pointer >= len(sequence):
+            return 1.0
         purchased_stocks = 1.0 / trade_start_price
         sequence_index = trade_start_pointer + 1
         while sequence_index < len(sequence) - 1:
@@ -155,6 +157,7 @@ class Population:
             # and subtract it from the initial wallet state (I prefer to write it verbatim)
             gain = result - 1.0
             result = 1.0 - gain
+        # print(trade_start_pointer, sequence_index, trade_type, result)
         return result
 
     def _evaluate_sequence(self, weights, biases, sequence):
@@ -253,10 +256,9 @@ class Population:
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
         # The calculations are rather batched along the population, each model being evaluated independently
         accumulated_evaluation = torch.ones(self.population_size, device=self.device)
-        #a = 0  # TODO remove after debug
         for sequence in batch:
-            #print(a); a += 1  # TODO remove after debug
-            accumulated_evaluation *= self._evaluate_sequence(weights, biases, sequence)
+            sequence_evaluation = self._evaluate_sequence(weights, biases, sequence)
+            accumulated_evaluation *= sequence_evaluation
         return accumulated_evaluation.tolist()
 
     def _merge_populations(self):
