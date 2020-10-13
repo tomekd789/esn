@@ -31,7 +31,7 @@ def main(args):
         os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
     else:
         device = 'cpu'
-    population = Population(device, args)
+    population = Population(device, data, args)
     for epoch in range(args.epochs):
         best_result_so_far = population.train()
         population.save(args.save_dir)

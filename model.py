@@ -22,9 +22,9 @@ class Population:
     """
     Model candidates
     """
-    def __init__(self, device, args):
+    def __init__(self, device, data, args):
         self.device = device
-        self.population_size = args.population_size
+        self.population_size = args.population
         self.model_size = args.model_size
         self.max_evaluation_steps = args.max_evaluation_steps
         self.take_profit = args.take_profit
@@ -40,7 +40,7 @@ class Population:
         self.population_biases = self.population_biases * 2 - 1
         self.new_population_weights = None
         self.new_population_biases = None
-        self.data_stream = self.data_stream
+        self.data_stream = data
         self.population_evaluations = self._evaluate_population(
             self.population_weights,
             self.population_biases,
@@ -137,7 +137,7 @@ class Population:
     def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
         trade_start_price = sequence[trade_start_pointer]
         sequence_index = trade_start_pointer
-        while sequence_index < len(sequence) - 1:
+        for sequence_index in range(len(sequence) - 1):
             # Check for Take Profit
             if sequence[sequence_index] >= trade_start_price * self.take_profit:
                 break
@@ -224,7 +224,7 @@ class Population:
             # If no trade was signalled, keep the existing value, i.e. 1.0
             if not is_trade[model_index]:
                 continue
-            trade_start_pointer = trade_start_pointers[model_index]
+            trade_start_pointer = int(trade_start_pointers[model_index].item())
             trade_type = "long" if take_long_position[model_index] else "short"
             trades_results[model_index] =\
                 self._calculate_trade_outcome(sequence, trade_start_pointer, trade_type)
