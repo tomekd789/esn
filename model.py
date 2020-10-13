@@ -26,21 +26,25 @@ class Population:
         self.device = device
         self.population_size = args.population
         self.model_size = args.model_size
+        self.mutation_probability = args.mutation_probability
+        self.co_probability = args.co_probability
         self.max_evaluation_steps = args.max_evaluation_steps
         self.take_profit = args.take_profit
         self.stop_loss = args.stop_loss
         # Random initialization, uniform distribution from [0, 1)
         # self.population_weights = torch.rand([population_size, model_size, model_size], device=device)
         # self.population_biases = torch.rand([population_size, model_size], device=device)
+        # Change distribution from [0, 1) to [-1, 1)
+        # self.population_weights = self.population_weights * 2 - 1
+        # self.population_biases = self.population_biases * 2 - 1
         # Zero initialization
         self.population_weights = torch.zeros([self.population_size, self.model_size, self.model_size], device=device)
         self.population_biases = torch.zeros([self.population_size, self.model_size], device=device)
-        # Change distribution from [0, 1) to [-1, 1)
-        self.population_weights = self.population_weights * 2 - 1
-        self.population_biases = self.population_biases * 2 - 1
         self.new_population_weights = None
         self.new_population_biases = None
         self.data_stream = data
+        # Note that this is an extra population evaluation, it takes additional time
+        # In case of zero initialization we might skip it, but this is risky if initialization method changes later
         self.population_evaluations = self._evaluate_population(
             self.population_weights,
             self.population_biases,
@@ -68,30 +72,28 @@ class Population:
         self.new_population_weights = self.population_weights.clone()
         self.new_population_biases = self.population_biases.clone()
 
-    def _mutate_new_population(self, mutation_probability=0.001):
+    def _mutate_new_population(self):
         """
         Mutate new population randomly, by increasing or decreasing by a small value
         Note: this code does not need to be very efficient, it will not be run frequently
-        :param mutation_probability: probability of a single value mutation
         :return: None
         """
         for i in range(self.population_size):
             for j in range(self.model_size):
                 for k in range(self.model_size):
-                    mutation_function = _get_mutation_function(mutation_probability)
+                    mutation_function = _get_mutation_function(self.mutation_probability)
                     value_before_mutation = self.new_population_weights[i, j, k]
                     self.new_population_weights[i, j, k] = mutation_function(value_before_mutation)
         for i in range(self.population_size):
             for j in range(self.model_size):
-                mutation_function = _get_mutation_function(mutation_probability)
+                mutation_function = _get_mutation_function(self.mutation_probability)
                 value_before_mutation = self.new_population_biases[i, j]
                 self.new_population_biases[i, j] = mutation_function(value_before_mutation)
 
-    def _crossing_over_in_new_population(self, co_probability=0.4):
+    def _crossing_over_in_new_population(self):
         """
         Cross-over models randomly
-        :param co_probability: crossing-over probability
-        :return:
+        :return: None
         """
         model_size_squared = self.model_size * self.model_size
         # Create a reshaped view of new population weights; values are shared, so we can do in situ modifications
@@ -99,26 +101,24 @@ class Population:
         # Sample all pairs from the new population randomly
         crossing_over_already_done = [False] * self.population_size  # Flags to note if c.o. happened
         while True:
-            remaining_population = [index for index in range(self.population_size)
-                                    if not crossing_over_already_done[index]]
+            remaining_population = [population_index for population_index in range(self.population_size)
+                                    if not crossing_over_already_done[population_index]]
             if len(remaining_population) < 2:
                 break
             first_index, second_index = random.sample(remaining_population, 2)
             crossing_over_already_done[first_index] = True
             crossing_over_already_done[second_index] = True
-            if random.random() < co_probability:  # Actual crossing over happens here
+            if random.random() < self.co_probability:  # Actual crossing over happens here
                 # Weights:
                 # Select the split point; at least one element from either side needs to be taken
                 co_split_index = random.choice(range(1, model_size_squared - 1))
                 # Swap sequences
-                saved_left_sequence = self.new_population_weights[first_index][:co_split_index]
-                saved_right_sequence = self.new_population_weights[second_index][co_split_index:]
-                self.new_population_weights[first_index][:co_split_index] =\
-                    self.new_population_weights[second_index][:co_split_index]
-                self.new_population_weights[second_index][co_split_index:] =\
-                    self.new_population_weights[first_index][co_split_index:]
-                self.new_population_weights[second_index][:co_split_index] = saved_left_sequence
-                self.new_population_weights[first_index][co_split_index:] = saved_right_sequence
+                saved_left_sequence = weights_reshaped[first_index][:co_split_index]
+                saved_right_sequence = weights_reshaped[second_index][co_split_index:]
+                weights_reshaped[first_index][:co_split_index] = weights_reshaped[second_index][:co_split_index]
+                weights_reshaped[second_index][co_split_index:] = weights_reshaped[first_index][co_split_index:]
+                weights_reshaped[second_index][:co_split_index] = saved_left_sequence
+                weights_reshaped[first_index][co_split_index:] = saved_right_sequence
                 # Biases (the same comments apply)
                 # Align the biases split point roughly with the weights split point
                 co_split_index = int(co_split_index / self.model_size)
@@ -136,18 +136,25 @@ class Population:
 
     def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
         trade_start_price = sequence[trade_start_pointer]
-        sequence_index = trade_start_pointer
-        for sequence_index in range(len(sequence) - 1):
+        # We start this calculation with $1.00 and buy at the trade start price
+        # To simulate continuous trading, we multiply the outcomes from single sequences
+        purchased_stocks = 1.0 / trade_start_price
+        sequence_index = trade_start_pointer + 1
+        while sequence_index < len(sequence) - 1:
             # Check for Take Profit
             if sequence[sequence_index] >= trade_start_price * self.take_profit:
                 break
             # Check for Stop Loss
             if sequence[sequence_index] <= trade_start_price * self.stop_loss:
                 break
-        trade_close_price = sequence[sequence_index]
-        result = trade_close_price / trade_start_price
-        if trade_type == 'short':
-            result = 1/result
+            sequence_index += 1
+        trade_close_price = sequence[sequence_index].astype(float)
+        result = purchased_stocks * trade_close_price
+        if trade_type == "short":
+            # I calculate the gain if the trade type would be long,
+            # and subtract it from the initial wallet state (I prefer to write it verbatim)
+            gain = result - 1.0
+            result = 1.0 - gain
         return result
 
     def _evaluate_sequence(self, weights, biases, sequence):
@@ -243,7 +250,9 @@ class Population:
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
         # The calculations are rather batched along the population, each model being evaluated independently
         accumulated_evaluation = torch.ones(self.population_size, device=self.device)
+        #a = 0  # TODO remove after debug
         for sequence in batch:
+            #print(a); a += 1  # TODO remove after debug
             accumulated_evaluation *= self._evaluate_sequence(weights, biases, sequence)
         return accumulated_evaluation.tolist()
 
