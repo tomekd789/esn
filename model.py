@@ -22,20 +22,25 @@ class Population:
     """
     Model candidates
     """
-    def __init__(self, device, population_size, model_size, max_evaluation_steps, data_stream):
+    def __init__(self, device, args):
         self.device = device
-        self.population_size = population_size
-        self.model_size = model_size
-        self.max_evaluation_steps = max_evaluation_steps
+        self.population_size = args.population_size
+        self.model_size = args.model_size
+        self.max_evaluation_steps = args.max_evaluation_steps
+        self.take_profit = args.take_profit
+        self.stop_loss = args.stop_loss
         # Random initialization, uniform distribution from [0, 1)
-        self.population_weights = torch.rand([population_size, model_size, model_size], device=device)
-        self.population_biases = torch.rand([population_size, model_size], device=device)
+        # self.population_weights = torch.rand([population_size, model_size, model_size], device=device)
+        # self.population_biases = torch.rand([population_size, model_size], device=device)
+        # Zero initialization
+        self.population_weights = torch.zeros([self.population_size, self.model_size, self.model_size], device=device)
+        self.population_biases = torch.zeros([self.population_size, self.model_size], device=device)
         # Change distribution from [0, 1) to [-1, 1)
         self.population_weights = self.population_weights * 2 - 1
         self.population_biases = self.population_biases * 2 - 1
         self.new_population_weights = None
         self.new_population_biases = None
-        self.data_stream = data_stream
+        self.data_stream = self.data_stream
         self.population_evaluations = self._evaluate_population(
             self.population_weights,
             self.population_biases,
@@ -129,61 +134,100 @@ class Population:
                 self.new_population_biases[second_index][:co_split_index] = saved_left_sequence
                 self.new_population_biases[first_index][co_split_index:] = saved_right_sequence
 
+    def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
+        trade_start_price = sequence[trade_start_pointer]
+        sequence_index = trade_start_pointer
+        while sequence_index < len(sequence) - 1:
+            # Check for Take Profit
+            if sequence[sequence_index] >= trade_start_price * self.take_profit:
+                break
+            # Check for Stop Loss
+            if sequence[sequence_index] <= trade_start_price * self.stop_loss:
+                break
+        trade_close_price = sequence[sequence_index]
+        result = trade_close_price / trade_start_price
+        if trade_type == 'short':
+            result = 1/result
+        return result
+
     def _evaluate_sequence(self, weights, biases, sequence):
         """
         Evaluate a single sequence
         :param weights: population models' weights
         :param biases: population models' biases
-        :param sequence: single trade sequence
+        :param sequence: single trade sequence as a python list
         :return: population-sized tensor of trade results
         """
         # Array of internal states for each model, zero-initialized
-        internal_states = torch.zeros(self.population_size, self.model_size).to(self.device)
+        internal_states = torch.zeros(self.population_size, self.model_size, device=self.device)
         # Models may have current sequence pointers set individually
-        sequence_pointers = torch.zeros(self.population_size).to(self.device)
+        sequence_pointers = torch.zeros(self.population_size, device=self.device)
         # Flags to mark if models predict a trade (individually)
-        is_trade = torch.zeros(self.population_size).to(self.device)
+        is_trade = torch.zeros(self.population_size, dtype=torch.bool, device=self.device)
         # Pointers for trade start
-        trade_start_pointers = torch.zeros(self.population_size).to(self.device)
+        trade_start_pointers = torch.zeros(self.population_size, device=self.device)
         # Flags to take long position (buy)
-        take_long_position = torch.zeros(self.population_size).to(self.device)
+        take_long_position = torch.zeros(self.population_size, dtype=torch.bool, device=self.device)
         # Flags to take long position (buy)
-        take_short_position = torch.zeros(self.population_size).to(self.device)
+        take_short_position = torch.zeros(self.population_size, dtype=torch.bool, device=self.device)
+        # Vectors used for masking
+        all_true = torch.ones(self.population_size, dtype=torch.bool, device=self.device)
+        all_zeros = torch.zeros(self.population_size, device=self.device)
+        all_ones = torch.ones(self.population_size, device=self.device)
         # Perform RNN steps with all models in parallel (leverage the CUDA SIMD architecture)
+        relu = torch.nn.ReLU()
         for _ in range(self.max_evaluation_steps):
             # For each internal state assign its 0-th element with the sequence value according to sequence pointers
             pointers = sequence_pointers.tolist()
-            for index, pointer in enumerate(pointers):
-                internal_states[index][0] = sequence[int(pointer)].astype(float)
+            for model_index, pointer in enumerate(pointers):
+                internal_states[model_index][0] = sequence[int(pointer)].astype(float)
 
-            """              THE CORE OPERATION. Efficiency is in much demand here              """
+            """                    THE CORE OPERATION.  Efficiency is much in demand here                   """
             # Scalar multiply internal states by corresponding models, add biases
-            internal_states = torch.einsum("bn, bmn -> bm", internal_states, weights) + biases
+            internal_states = torch.einsum("bn, bmn -> bm", internal_states, weights)
+            internal_states += biases
+            internal_states = relu(internal_states)
+            """                                                                                             """
 
             # The last three state values have a special meaning:
             #     s[-3]: progress input pointer
             #     s[-2]: take long position (buy)
             #     s[-1] : take short position (sell)
-            # Update trade-related values:
-            # if not is_trade:
-            #     buy = s[-2] >= 1.0
-            #     sell = s[-1] >= 1.0
-            #     if buy xor sell:
-            #         is_trade = true
-            #         trade_start_pointer = sequence_pointer
-            #         if buy:
-            #             take_long_position = True
-            #         if sell:
-            #             take_short_position = True
-            # Check for sequence pointer increment
-            # if s[-3] >= 1.0:
-            #     sequence_pointer += 1
-            #     if sequence_pointer > len(sequence):
-            #         sequence_pointer = len(sequence)
-            # Check if all trades have been predicted
-        # Calculate trades results
-        trades_results = torch.zeros(self.population_size).to(self.device)
-        # TODO implement trade result calculations
+            progress_input = internal_states[:, -1] >= 1.0
+            buy_signals = internal_states[:, -2] >= 1.0
+            sell_signals = internal_states[:, -3] >= 1.0
+            # Buy and sell signals mutually cancel out
+            collisions = torch.logical_and(buy_signals, sell_signals)
+            buy_signals = torch.logical_and(buy_signals, torch.logical_not(collisions))
+            sell_signals = torch.logical_and(sell_signals, torch.logical_not(collisions))
+            # Exclude models with trade signal already on
+            buy_signals = torch.logical_and(buy_signals, torch.logical_not(is_trade))
+            sell_signals = torch.logical_and(sell_signals, torch.logical_not(is_trade))
+            # Update long/short signals *if* the signal is set (otherwise do not change!)
+            take_long_position = torch.where(buy_signals, all_true, take_long_position)
+            take_short_position = torch.where(sell_signals, all_true, take_short_position)
+            # The same for trade signals
+            is_trade = torch.where(buy_signals, all_true, is_trade)
+            is_trade = torch.where(sell_signals, all_true, is_trade)
+            # Update trade start pointers *if* buy or sell signal is on
+            trade_start_pointers = torch.where(buy_signals, sequence_pointers, trade_start_pointers)
+            trade_start_pointers = torch.where(sell_signals, sequence_pointers, trade_start_pointers)
+            # Update progress input
+            step_pointers_forward = torch.where(progress_input, all_ones, all_zeros)
+            sequence_pointers += step_pointers_forward
+            # Terminate the calculations if all trade signals have been switched on
+            if is_trade.all():
+                break
+        # Calculate trades results, model by model; initial wallet state is 1.0
+        trades_results = torch.ones(self.population_size, device=self.device)
+        for model_index in range(self.population_size):
+            # If no trade was signalled, keep the existing value, i.e. 1.0
+            if not is_trade[model_index]:
+                continue
+            trade_start_pointer = trade_start_pointers[model_index]
+            trade_type = "long" if take_long_position[model_index] else "short"
+            trades_results[model_index] =\
+                self._calculate_trade_outcome(sequence, trade_start_pointer, trade_type)
         return trades_results
 
     def _evaluate_population(self, weights, biases, data_stream):
@@ -197,9 +241,10 @@ class Population:
         """
         batch = data_stream.__next__()
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
-        accumulated_evaluation = torch.zeros(weights.shape[0]).to(self.device)
+        # The calculations are rather batched along the population, each model being evaluated independently
+        accumulated_evaluation = torch.ones(self.population_size, device=self.device)
         for sequence in batch:
-            accumulated_evaluation += self._evaluate_sequence(weights, biases, sequence)
+            accumulated_evaluation *= self._evaluate_sequence(weights, biases, sequence)
         return accumulated_evaluation.tolist()
 
     def _merge_populations(self):
@@ -253,11 +298,9 @@ class Population:
     def train(self):
         # Create a new generation and evaluate it
         self.new_generation()
-        # Take the best result so far, to return it at the end
-        best_result_so_far = max(self.population_evaluations + self.new_population_evaluations)
         # Merge old and new generations, pick the best ones; prefer newer models over old ones
         self._merge_populations()
-        return best_result_so_far
+        return max(self.population_evaluations)
 
     def save(self, save_path):
         """

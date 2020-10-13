@@ -18,6 +18,8 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
     parser.add_argument("--population", type=int, help="Population size")
     parser.add_argument("--model_size", type=int, help="Model size")
     parser.add_argument("--max_evaluation_steps", type=int, help="Maximum number of evaluation steps")
+    parser.add_argument("--take_profit", type=float, help="Take profit: 1.05 means +5%")
+    parser.add_argument("--stop_loss", type=float, help="Stop loss: 0.95 means -5%")
     parser.add_argument("--save_dir", help="Model save directory")
     return parser.parse_args()
 
@@ -29,7 +31,7 @@ def main(args):
         os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
     else:
         device = 'cpu'
-    population = Population(device, args.population, args.model_size, args.max_evaluation_steps,data)
+    population = Population(device, args)
     for epoch in range(args.epochs):
         best_result_so_far = population.train()
         population.save(args.save_dir)
