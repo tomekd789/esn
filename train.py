@@ -70,7 +70,7 @@ def main(args):
     population = Population(device, data, args)
     for epoch in range(args.epochs):
         best_result_so_far = population.train()
-        if epoch % 10 == 0:  # IMO tt does not make much sense to spam with every epoch
+        if epoch % 10 == 0 or epoch == args.epochs - 1:  # IMO tt does not make much sense to spam with every epoch
             # best_result_so_far is $s owned, from $1.00 after applying the batch sequence
             # we need to normalize to get the yearly percent profit
             trade_duration_in_weeks = args.batch * 2  # Single sequence is two weeks # TODO magic constant...
