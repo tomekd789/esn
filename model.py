@@ -14,6 +14,11 @@ MUTATION_FUNCTIONS = [
 
 
 def _get_mutation_function(mutation_probability):
+    """
+    Choose a mutation function randomly from the given list
+    :param mutation_probability: with 1 - mutation probability return identity (no mutation)
+    :return: float -> float function executing the mutation (also identity in case of no mutation)
+    """
     if random.random() < mutation_probability:
         return lambda x: x
     else:
@@ -22,7 +27,7 @@ def _get_mutation_function(mutation_probability):
 
 class Population:
     """
-    Model candidates
+    Implementation of the population of models, with methods to generate and evaluate them
     """
     def __init__(self, device, data, args):
         self.start_time_as_string = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -61,8 +66,8 @@ class Population:
 
     def _copy_population(self):
         """
-        Create a copy of the existing population; it will be randomly modified and evaluated
-        :return:
+        Create a copy of the existing population; it will be randomly modified and ten evaluated
+        :return: None
         """
         self.new_population_weights = self.population_weights.clone()
         self.new_population_biases = self.population_biases.clone()
@@ -130,6 +135,15 @@ class Population:
                 self.new_population_biases[first_index][co_split_index:] = saved_right_sequence
 
     def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
+        """
+        Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
+        starting with 1.0 wallet
+        Note: if trade pointer is at the end of the sequence, the trade is not performed
+        :param sequence: asset prices in the sequential order
+        :param trade_start_pointer: the pointer where the trade actually begins
+        :param trade_type: can be "long" or "short", for buy or sell transactions
+        :return: the wallet after trade, bool information if any trade was actually performed
+        """
         trade_start_price = sequence[trade_start_pointer]
         trade_actually_executed = False  # Further used to count trades executed by the model
         # We start this calculation with $1.00 and buy at the trade start price
@@ -164,7 +178,7 @@ class Population:
         :param weights: population models' weights
         :param biases: population models' biases
         :param sequence: single trade sequence as a python list
-        :return: population-sized tensor of trade results
+        :return: population-sized tensor of trade results, vector of bool flags showing if trade was actually performed
         """
         # Array of internal states for each model, zero-initialized
         internal_states = torch.zeros(self.population_size, self.model_size, device=self.device)
@@ -257,7 +271,7 @@ class Population:
         :param weights: array of population models' weights
         :param biases: array of biases
         :param data_stream: the stream of data batches, as lists of numpy arrays
-        :return: population-sized list of trade results
+        :return: population-sized list of trade results, list of trade counts actually executed
         """
         batch = data_stream.__next__()
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
@@ -337,6 +351,10 @@ class Population:
         return max(range(len(self.population_evaluations)), key=lambda i: self.population_evaluations[i])
 
     def train(self):
+        """
+        Single epoch
+        :return: evaluation of the best model and the number of trades it took
+        """
         # Create a new generation and evaluate it
         self.new_generation()
         # Merge old and new generations, pick the best ones; prefer newer models over old ones
@@ -346,14 +364,18 @@ class Population:
 
     def save(self, save_path):
         """
-        Saves the best model (i.e. indexed as 0) to the save path, with names 'weights.pt' and 'biases.pt'
+        Saves the best model to the save path. Three files are saved:
+         - weights.pt: tensor of weights
+         - biases.pt: tensor of biases
+         - args.txt: command line arguments as string
+         Timestamp is taken at the program start, and added to file names
         :param save_path: Directory path to save the model
         :return: None
         """
         best_model_index = self._best_model_index()
         weights_file_name = os.path.join(save_path, self.start_time_as_string + '_weights.pt')
         biases_file_name = os.path.join(save_path, self.start_time_as_string + '_biases.pt')
-        args_file_name = os.path.join(save_path, self.start_time_as_string + '_args.pt')
+        args_file_name = os.path.join(save_path, self.start_time_as_string + '_args.txt')
         torch.save(self.population_weights[best_model_index], weights_file_name)
         torch.save(self.population_biases[best_model_index], biases_file_name)
         with open(args_file_name, 'w') as args_file:
