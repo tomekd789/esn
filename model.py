@@ -193,19 +193,19 @@ class Population:
             for model_index, pointer in enumerate(pointers):
                 internal_states[model_index][0] = sequence[int(pointer)].astype(float)
 
-            """                    THE CORE OPERATION.  Efficiency is much in demand here                   """
+            """                  THE CORE OPERATION.  Efficiency is much in demand here                   """
             # Scalar multiply internal states by corresponding models,
-            # Option 1: einsum
+            # Option 1: the einsum abstraction
             internal_states = torch.einsum("bn, bmn -> bm", internal_states, weights)
-            # Option 2: left-handed vector
+            # Option 2: explicit left side vector multiplication
             # internal_states = torch.bmm(internal_states.unsqueeze(1), weights.transpose(2, 1)).squeeze(1)
-            # Option 3: left-handed matrix
+            # Option 3: explicit right side vector multiplication
             internal_states = torch.bmm(weights, internal_states.unsqueeze(2)).squeeze(2)
             # add biases,
             internal_states += biases
             # and do the ReLU (important!)
             internal_states = relu(internal_states)
-            """                                                                                             """
+            """                                                                                           """
 
             # The last three state values have a special meaning:
             #     s[-3]: progress input pointer
