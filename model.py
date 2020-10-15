@@ -1,3 +1,5 @@
+from datetime import datetime
+import logging
 import os
 import random
 
@@ -23,7 +25,9 @@ class Population:
     Model candidates
     """
     def __init__(self, device, data, args):
+        self.start_time_as_string = datetime.now().strftime("%Y%m%d%H%M%S")
         self.device = device
+        self.args = args
         self.population_size = args.population
         self.model_size = args.model_size
         self.mutation_probability = args.mutation_probability
@@ -31,25 +35,16 @@ class Population:
         self.max_evaluation_steps = args.max_evaluation_steps
         self.take_profit = args.take_profit
         self.stop_loss = args.stop_loss
-        # Random initialization, uniform distribution from [0, 1)
-        # self.population_weights = torch.rand([population_size, model_size, model_size], device=device)
-        # self.population_biases = torch.rand([population_size, model_size], device=device)
-        # Change distribution from [0, 1) to [-1, 1)
-        # self.population_weights = self.population_weights * 2 - 1
-        # self.population_biases = self.population_biases * 2 - 1
         # Zero initialization
         self.population_weights = torch.zeros([self.population_size, self.model_size, self.model_size], device=device)
         self.population_biases = torch.zeros([self.population_size, self.model_size], device=device)
         self.new_population_weights = None
         self.new_population_biases = None
         self.data_stream = data
-        # Note that this is an extra population evaluation, it takes additional time
-        # In case of zero initialization we might skip it, but this is risky if initialization method changes later
-        self.population_evaluations = self._evaluate_population(
-            self.population_weights,
-            self.population_biases,
-            self.data_stream)
+        self.population_evaluations = torch.zeros(self.population_size)
+        self.trades_counters = [0] * self.population_size
         self.new_population_evaluations = None
+        self.new_trades_counters = None
 
     def new_generation(self):
         """
@@ -59,7 +54,7 @@ class Population:
         self._copy_population()
         self._mutate_new_population()
         self._crossing_over_in_new_population()
-        self.new_population_evaluations = self._evaluate_population(
+        self.new_population_evaluations, self.new_trades_counters = self._evaluate_population(
             self.new_population_weights,
             self.new_population_biases,
             self.data_stream)
@@ -136,10 +131,12 @@ class Population:
 
     def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
         trade_start_price = sequence[trade_start_pointer]
+        trade_actually_executed = False  # Further used to count trades executed by the model
         # We start this calculation with $1.00 and buy at the trade start price
         # To simulate continuous trading, we multiply the outcomes from single sequences
         if trade_start_pointer >= len(sequence):
-            return 1.0
+            return 1.0, trade_start_price
+        trade_actually_executed = True
         purchased_stocks = 1.0 / trade_start_price
         sequence_index = trade_start_pointer + 1
         while sequence_index < len(sequence) - 1:
@@ -157,8 +154,9 @@ class Population:
             # and subtract it from the initial wallet state (I prefer to write it verbatim)
             gain = result - 1.0
             result = 1.0 - gain
-        # print(trade_start_pointer, sequence_index, trade_type, result)
-        return result
+        # Ignore black swans - reduce them to the assumed take profit
+        result = min(result, self.take_profit)
+        return result, trade_actually_executed
 
     def _evaluate_sequence(self, weights, biases, sequence):
         """
@@ -196,9 +194,16 @@ class Population:
                 internal_states[model_index][0] = sequence[int(pointer)].astype(float)
 
             """                    THE CORE OPERATION.  Efficiency is much in demand here                   """
-            # Scalar multiply internal states by corresponding models, add biases
+            # Scalar multiply internal states by corresponding models,
+            # Option 1: einsum
             internal_states = torch.einsum("bn, bmn -> bm", internal_states, weights)
+            # Option 2: left-handed vector
+            # internal_states = torch.bmm(internal_states.unsqueeze(1), weights.transpose(2, 1)).squeeze(1)
+            # Option 3: left-handed matrix
+            internal_states = torch.bmm(weights, internal_states.unsqueeze(2)).squeeze(2)
+            # add biases,
             internal_states += biases
+            # and do the ReLU (important!)
             internal_states = relu(internal_states)
             """                                                                                             """
 
@@ -233,15 +238,17 @@ class Population:
                 break
         # Calculate trades results, model by model; initial wallet state is 1.0
         trades_results = torch.ones(self.population_size, device=self.device)
+        trades_executed = [False] * self.population_size
         for model_index in range(self.population_size):
             # If no trade was signalled, keep the existing value, i.e. 1.0
             if not is_trade[model_index]:
                 continue
             trade_start_pointer = int(trade_start_pointers[model_index].item())
             trade_type = "long" if take_long_position[model_index] else "short"
-            trades_results[model_index] =\
-                self._calculate_trade_outcome(sequence, trade_start_pointer, trade_type)
-        return trades_results
+            trade_outcome, trade_executed = self._calculate_trade_outcome(sequence, trade_start_pointer, trade_type)
+            trades_results[model_index] = trade_outcome
+            trades_executed[model_index] = trade_executed
+        return trades_results, trades_executed
 
     def _evaluate_population(self, weights, biases, data_stream):
         """
@@ -256,10 +263,13 @@ class Population:
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
         # The calculations are rather batched along the population, each model being evaluated independently
         accumulated_evaluation = torch.ones(self.population_size, device=self.device)
+        trades_executed_counters = [0] * self.population_size
         for sequence in batch:
-            sequence_evaluation = self._evaluate_sequence(weights, biases, sequence)
+            sequence_evaluation, trades_executed = self._evaluate_sequence(weights, biases, sequence)
             accumulated_evaluation *= sequence_evaluation
-        return accumulated_evaluation.tolist()
+            for i in range(len(trades_executed_counters)):
+                trades_executed_counters[i] += 1 if trades_executed[i] else 0
+        return accumulated_evaluation.tolist(), trades_executed_counters
 
     def _merge_populations(self):
         """
@@ -291,8 +301,8 @@ class Population:
                 merge_indexes.append(new_evaluations[max_value_pointer_new])
                 max_value_pointer_new += 1
         # Now take only tensor indexes, "unzipping" with regard to old/new
-        merge_indexes_old = [tuple[1] for tuple in merge_indexes if tuple[0] == 0]
-        merge_indexes_new = [tuple[1] for tuple in merge_indexes if tuple[0] == 1]
+        merge_indexes_old = [item[1] for item in merge_indexes if item[0] == 0]
+        merge_indexes_new = [item[1] for item in merge_indexes if item[0] == 1]
         # Use the indexes to extract good models from the populations
         weights_from_old_indexes = self.population_weights[merge_indexes_old]
         biases_from_old_indexes = self.population_biases[merge_indexes_old]
@@ -304,17 +314,35 @@ class Population:
         # Now the merged population becomes the "old" one; updating evaluations
         old_evaluations_values = [self.population_evaluations[index] for index in merge_indexes_old]
         new_evaluations_values = [self.new_population_evaluations[index] for index in merge_indexes_new]
+        old_trades_counters = [self.trades_counters[index] for index in merge_indexes_old]
+        new_trades_counters = [self.new_trades_counters[index] for index in merge_indexes_new]
         self.population_evaluations = old_evaluations_values + new_evaluations_values
+        self.trades_counters = old_trades_counters + new_trades_counters
         self.new_population_weights = None
         self.new_population_biases = None
         self.new_population_evaluations = None
+        self.new_trades_counters = None
+        # Adaptive mutation probability: tend to have roughly half of models replaced during an epoch
+        new_models_percentage = int(len(merge_indexes_new) * 100 / self.population_size)
+        if new_models_percentage < 50:
+            self.mutation_probability *= 0.95  # Decrease the mutation probability for better stability
+            self.co_probability *= 0.95  # Decrease the cross-over probability for better stability
+        else:
+            self.mutation_probability *= 1.05  # Increase the mutation probability for better exploration
+            self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
+        logging.info(f'New models taken: {new_models_percentage}%; mutation probability: {self.mutation_probability}; cross-over probability: {self.co_probability}')
+
+    def _best_model_index(self):
+        # There is no argmax for lists in Python(!)
+        return max(range(len(self.population_evaluations)), key=lambda i: self.population_evaluations[i])
 
     def train(self):
         # Create a new generation and evaluate it
         self.new_generation()
         # Merge old and new generations, pick the best ones; prefer newer models over old ones
         self._merge_populations()
-        return max(self.population_evaluations)
+        best_model_index = self._best_model_index()
+        return self.population_evaluations[best_model_index], self.trades_counters[best_model_index]
 
     def save(self, save_path):
         """
@@ -322,7 +350,11 @@ class Population:
         :param save_path: Directory path to save the model
         :return: None
         """
-        # There is no argmax for lists in Python(!)
-        best_model_index = max(range(len(self.population_evaluations)), key=lambda i: self.population_evaluations[i])
-        torch.save(self.population_weights[best_model_index], os.path.join(save_path, 'weights.pt'))
-        torch.save(self.population_biases[best_model_index], os.path.join(save_path, 'biases.pt'))
+        best_model_index = self._best_model_index()
+        weights_file_name = os.path.join(save_path, self.start_time_as_string + '_weights.pt')
+        biases_file_name = os.path.join(save_path, self.start_time_as_string + '_biases.pt')
+        args_file_name = os.path.join(save_path, self.start_time_as_string + '_args.pt')
+        torch.save(self.population_weights[best_model_index], weights_file_name)
+        torch.save(self.population_biases[best_model_index], biases_file_name)
+        with open(args_file_name, 'w') as args_file:
+            args_file.write(str(self.args))
