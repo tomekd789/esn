@@ -164,14 +164,12 @@ class Population:
             sequence_index += 1
         trade_close_price = sequence[sequence_index].astype(float)
         result = purchased_stocks * trade_close_price
+        result = log(result)
         if trade_type == "short":
-            # I calculate the gain if the trade type would be long,
-            # and subtract it from the initial wallet state (I prefer to write it verbatim)
-            gain = result - 1.0
-            result = 1.0 - gain
+            result = -result
         # Ignore black swans - reduce them to the assumed take profit
-        result = min(result, self.take_profit)
-        return log(result), trade_actually_executed
+        # result = min(result, self.take_profit)
+        return result, trade_actually_executed
 
     def _evaluate_sequence(self, weights, biases, sequence):
         """
@@ -383,3 +381,18 @@ class Population:
         torch.save(self.population_biases[best_model_index], biases_file_name)
         with open(args_file_name, 'w') as args_file:
             args_file.write(str(self.args))
+
+
+class Model:
+    """
+    The class for a single model, for inference / evaluation
+    """
+    def __init__(self, device, data, args):
+        self.device = device
+        self.data = data
+        self.args = args
+        weights_file_name = os.path.join(args.load_dir, args.file_prefix + "_weights.pt")
+        biases_file_name = os.path.join(args.load_dir, args.file_prefix + "biases.pt")
+        self.weights = torch.load(weights_file_name).to(device)
+        self.biases = torch.load(biases_file_name).to(device)
+        # TODO continue
