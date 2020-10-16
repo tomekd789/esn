@@ -25,7 +25,7 @@ def data_stream(data_file, batch_size):
     :param batch_size: Data batch size
     :return: Random data batch
     """
-    basic_data_stream = basic_data_stream(data_file)
+    _basic_data_stream = basic_data_stream(data_file)
     while True:
-        data_batch = [basic_data_stream.__next__() for _ in range(batch_size)]
+        data_batch = [_basic_data_stream.__next__() for _ in range(batch_size)]
         yield data_batch
