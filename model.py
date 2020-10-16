@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+from math import log
 import os
 import random
 
@@ -137,19 +138,19 @@ class Population:
     def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
         """
         Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
-        starting with 1.0 wallet
+        starting with 1.0 wallet. Note: logarithm is returned, for numerical stability
         Note: if trade pointer is at the end of the sequence, the trade is not performed
         :param sequence: asset prices in the sequential order
         :param trade_start_pointer: the pointer where the trade actually begins
         :param trade_type: can be "long" or "short", for buy or sell transactions
-        :return: the wallet after trade, bool information if any trade was actually performed
+        :return: *logarithm* of the wallet after trade, bool information if any trade was actually performed
         """
         trade_start_price = sequence[trade_start_pointer]
         trade_actually_executed = False  # Further used to count trades executed by the model
         # We start this calculation with $1.00 and buy at the trade start price
         # To simulate continuous trading, we multiply the outcomes from single sequences
         if trade_start_pointer >= len(sequence):
-            return 1.0, trade_start_price
+            return 0.0, trade_start_price
         trade_actually_executed = True
         purchased_stocks = 1.0 / trade_start_price
         sequence_index = trade_start_pointer + 1
@@ -170,7 +171,7 @@ class Population:
             result = 1.0 - gain
         # Ignore black swans - reduce them to the assumed take profit
         result = min(result, self.take_profit)
-        return result, trade_actually_executed
+        return log(result), trade_actually_executed
 
     def _evaluate_sequence(self, weights, biases, sequence):
         """
@@ -207,14 +208,16 @@ class Population:
             for model_index, pointer in enumerate(pointers):
                 internal_states[model_index][0] = sequence[int(pointer)].astype(float)
 
+            """ ----------------------------------------------------------------------------------------- """
             """                  THE CORE OPERATION.  Efficiency is much in demand here                   """
+            """ ----------------------------------------------------------------------------------------- """
             # Scalar multiply internal states by corresponding models,
-            # Option 1: the einsum abstraction
+            # Option 1: the Einstein summation convention abstraction
             internal_states = torch.einsum("bn, bmn -> bm", internal_states, weights)
-            # Option 2: explicit left side vector multiplication
+            # Option 2: explicit left side vector multiplication; no apparent speed gain
             # internal_states = torch.bmm(internal_states.unsqueeze(1), weights.transpose(2, 1)).squeeze(1)
-            # Option 3: explicit right side vector multiplication
-            internal_states = torch.bmm(weights, internal_states.unsqueeze(2)).squeeze(2)
+            # Option 3: explicit right side vector multiplication; no apparent speed gain
+            # internal_states = torch.bmm(weights, internal_states.unsqueeze(2)).squeeze(2)
             # add biases,
             internal_states += biases
             # and do the ReLU (important!)
@@ -280,7 +283,7 @@ class Population:
         trades_executed_counters = [0] * self.population_size
         for sequence in batch:
             sequence_evaluation, trades_executed = self._evaluate_sequence(weights, biases, sequence)
-            accumulated_evaluation *= sequence_evaluation
+            accumulated_evaluation += sequence_evaluation  # Evaluations are logarithms, hence the summation
             for i in range(len(trades_executed_counters)):
                 trades_executed_counters[i] += 1 if trades_executed[i] else 0
         return accumulated_evaluation.tolist(), trades_executed_counters

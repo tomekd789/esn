@@ -39,6 +39,8 @@ import os
 from data import data_stream
 from model import Population
 
+WEEKS_PER_SEQUENCE = 2
+
 
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
     parser = argparse.ArgumentParser()
@@ -69,16 +71,17 @@ def main(args):
         device = 'cpu'
     population = Population(device, data, args)
     for epoch in range(args.epochs):
-        best_result_so_far, trades_count = population.train()
+        log_best_result_so_far, trades_count = population.train()
         # best_result_so_far is $s owned, from $1.00 after applying the batch sequence
         # we need to normalize to get the yearly percent profit
-        trade_duration_in_weeks = args.batch * 2  # Single sequence is two weeks # TODO magic constant...
-        trade_duration_in_years = trade_duration_in_weeks / 52
-        wallet_after_a_year = exp(log(best_result_so_far)/trade_duration_in_years)
+        trade_duration_weeks = args.batch * WEEKS_PER_SEQUENCE
+        trade_duration_years = trade_duration_weeks / 52
+        log_best_result_per_year = log_best_result_so_far / trade_duration_years
+        wallet_after_a_year = exp(log_best_result_per_year)
         yearly_gain_percent = (wallet_after_a_year - 1.0) * 100  # Wallet value starts at $1.00
         population.save(args.save_dir)
         logging.info(f"Epoch: {epoch + 1}; " +
-                     f"best evaluation: {best_result_so_far:.2f}; " +
+                     f"best evaluation: {exp(log_best_result_so_far):.2f}; " +
                      f"best model's yearly gain: {yearly_gain_percent:.1f}%; " +
                      f"trades: {trades_count} (of {args.batch} possible)")
 
