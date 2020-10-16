@@ -81,7 +81,7 @@ def main(args):
         yearly_gain_percent = (wallet_after_a_year - 1.0) * 100  # Wallet value starts at $1.00
         population.save(args.save_dir)
         logging.info(f"Epoch: {epoch + 1}; " +
-                     f"best evaluation: {exp(log_best_result_so_far):.2f}; " +
+                     f"best evaluation: {log_best_result_so_far:.2f}; " +
                      f"best model's yearly gain: {yearly_gain_percent:.1f}%; " +
                      f"trades: {trades_count} (of {args.batch} possible)")
 
