@@ -254,7 +254,7 @@ class Population:
             if is_trade.all():
                 break
         # Calculate trades results, model by model; initial wallet state is 1.0
-        trades_results = torch.ones(self.population_size, device=self.device)
+        trades_results = torch.zeros(self.population_size, device=self.device)
         trades_executed = [False] * self.population_size
         for model_index in range(self.population_size):
             # If no trade was signalled, keep the existing value, i.e. 1.0
@@ -279,7 +279,7 @@ class Population:
         batch = data_stream.__next__()
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
         # The calculations are rather batched along the population, each model being evaluated independently
-        accumulated_evaluation = torch.ones(self.population_size, device=self.device)
+        accumulated_evaluation = torch.zeros(self.population_size, device=self.device)
         trades_executed_counters = [0] * self.population_size
         for sequence in batch:
             sequence_evaluation, trades_executed = self._evaluate_sequence(weights, biases, sequence)
