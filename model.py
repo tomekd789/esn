@@ -138,20 +138,18 @@ class Population:
     def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
         """
         Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
-        starting with 1.0 wallet. Note: logarithm is returned, for numerical stability
+        starting with 1.0 wallet.
         Note: if trade pointer is at the end of the sequence, the trade is not performed
         :param sequence: asset prices in the sequential order
         :param trade_start_pointer: the pointer where the trade actually begins
         :param trade_type: can be "long" or "short", for buy or sell transactions
-        :return: *logarithm* of the wallet after trade, bool information if any trade was actually performed
+        :return: gain after trade, bool information if any trade was actually performed
         """
         trade_start_price = sequence[trade_start_pointer]
-        trade_actually_executed = False  # Further used to count trades executed by the model
         # We start this calculation with $1.00 and buy at the trade start price
         # To simulate continuous trading, we multiply the outcomes from single sequences
         if trade_start_pointer >= len(sequence):
-            return 0.0, trade_start_price
-        trade_actually_executed = True
+            return 0.0, False  # No loss/gain, trade not executed
         purchased_stocks = 1.0 / trade_start_price
         sequence_index = trade_start_pointer + 1
         while sequence_index < len(sequence) - 1:
@@ -164,12 +162,11 @@ class Population:
             sequence_index += 1
         trade_close_price = sequence[sequence_index].astype(float)
         result = purchased_stocks * trade_close_price
-        result = log(result)
+        gain = result - 1.0
         if trade_type == "short":
-            result = -result
-        # Ignore black swans - reduce them to the assumed take profit
-        # result = min(result, self.take_profit)
-        return result, trade_actually_executed
+            gain = -gain
+            gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
+        return gain, True
 
     def _evaluate_sequence(self, weights, biases, sequence):
         """
@@ -251,11 +248,11 @@ class Population:
             # Terminate the calculations if all trade signals have been switched on
             if is_trade.all():
                 break
-        # Calculate trades results, model by model; initial wallet state is 1.0
+        # Calculate trades gains, model by model
         trades_results = torch.zeros(self.population_size, device=self.device)
         trades_executed = [False] * self.population_size
         for model_index in range(self.population_size):
-            # If no trade was signalled, keep the existing value, i.e. 1.0
+            # If no trade was signalled, keep the existing value, i.e. 0.0
             if not is_trade[model_index]:
                 continue
             trade_start_pointer = int(trade_start_pointers[model_index].item())
@@ -276,12 +273,12 @@ class Population:
         """
         batch = data_stream.__next__()
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
-        # The calculations are rather batched along the population, each model being evaluated independently
+        # The calculations are rather batched along the population dimension, each model being evaluated independently
         accumulated_evaluation = torch.zeros(self.population_size, device=self.device)
         trades_executed_counters = [0] * self.population_size
         for sequence in batch:
             sequence_evaluation, trades_executed = self._evaluate_sequence(weights, biases, sequence)
-            accumulated_evaluation += sequence_evaluation  # Evaluations are logarithms, hence the summation
+            accumulated_evaluation += sequence_evaluation
             for i in range(len(trades_executed_counters)):
                 trades_executed_counters[i] += 1 if trades_executed[i] else 0
         return accumulated_evaluation.tolist(), trades_executed_counters

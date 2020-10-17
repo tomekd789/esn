@@ -33,7 +33,7 @@ Meaning of selected parameters:
 """
 import argparse
 import logging
-from math import exp
+from math import exp, log
 import os
 
 from data import data_stream
@@ -71,17 +71,16 @@ def main(args):
         device = 'cpu'
     population = Population(device, data, args)
     for epoch in range(args.epochs):
-        log_best_result_so_far, trades_count = population.train()
-        # best_result_so_far is $s owned, from $1.00 after applying the batch sequence
+        best_result_so_far, trades_count = population.train()
+        # best_result_so_far is $s loss/gain from $1.00, summed by the batch sequence
         # we need to normalize to get the yearly percent profit
         trade_duration_weeks = args.batch * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52
-        log_best_result_per_year = log_best_result_so_far / trade_duration_years
-        wallet_after_a_year = exp(log_best_result_per_year)
-        yearly_gain_percent = (wallet_after_a_year - 1.0) * 100  # Wallet value starts at $1.00
+        best_result_per_year = best_result_so_far / trade_duration_years
+        yearly_gain_percent = best_result_per_year * 100  # Wallet value starts at $1.00
         population.save(args.save_dir)
         logging.info(f"Epoch: {epoch + 1}; " +
-                     f"best evaluation: {log_best_result_so_far:.2f}; " +
+                     f"best evaluation: {best_result_so_far:.2f}; " +
                      f"best model's yearly gain: {yearly_gain_percent:.1f}%; " +
                      f"trades: {trades_count} (of {args.batch} possible)")
 
