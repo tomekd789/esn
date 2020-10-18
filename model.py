@@ -166,6 +166,8 @@ class Population:
         if trade_type == "short":
             gain = -gain
             gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
+        # Throttle profit
+        gain = min(gain, self.take_profit - 1)
         return gain, True
 
     def _evaluate_sequence(self, weights, biases, sequence):
