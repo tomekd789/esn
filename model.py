@@ -167,7 +167,7 @@ class Population:
             gain = -gain
             gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
         # Throttle profit
-        gain = min(gain, self.take_profit - 1)
+        # gain = min(gain, self.take_profit - 1)
         return gain, True
 
     def _evaluate_sequence(self, weights, biases, sequence):
@@ -345,6 +345,8 @@ class Population:
             self.mutation_probability *= 1.05  # Increase the mutation probability for better exploration
             self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
         logging.info(f'New models taken: {new_models_percentage}%; mutation probability: {self.mutation_probability}; cross-over probability: {self.co_probability}')
+        if new_models_percentage == 0:
+            self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]
 
     def _best_model_index(self):
         # There is no argmax for lists in Python(!)
