@@ -20,7 +20,7 @@ def _get_mutation_function(mutation_probability):
     :param mutation_probability: with 1 - mutation probability return identity (no mutation)
     :return: float -> float function executing the mutation (also identity in case of no mutation)
     """
-    if random.random() < mutation_probability:
+    if random.random() > mutation_probability:
         return lambda x: x
     else:
         return random.choice(MUTATION_FUNCTIONS)
