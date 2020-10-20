@@ -340,10 +340,11 @@ class Population:
         new_models_percentage = int(len(merge_indexes_new) * 100 / self.population_size)
         if new_models_percentage < 50:
             self.mutation_probability *= 0.95  # Decrease the mutation probability for better stability
-            self.co_probability *= 0.95  # Decrease the cross-over probability for better stability
+            # self.co_probability *= 0.95  # Decrease the cross-over probability for better stability
         else:
             self.mutation_probability *= 1.05  # Increase the mutation probability for better exploration
-            self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
+            self.mutation_probability = min(self.mutation_probability, 1.0)
+            # self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
         logging.info(f'New models taken: {new_models_percentage}%; mutation probability: {self.mutation_probability}; cross-over probability: {self.co_probability}')
         if new_models_percentage == 0:
             self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]

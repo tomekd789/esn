@@ -48,20 +48,18 @@ def main(args):
     data = basic_data_stream(args.data)
     device = 'cpu'
     model = Model(device, data, args)
+    gain_so_far = 0.0
     for sequence_counter in range (args.sequences):
         sequence = data.__next__()
-        log_best_result_so_far, trades_count = population.train()
-        # best_result_so_far is $s owned, from $1.00 after applying the batch sequence
-        # we need to normalize to get the yearly percent profit
-        trade_duration_weeks = args.batch * WEEKS_PER_SEQUENCE
+        gain, trade_start_pointer = model.infer(sequence)
+        gain_so_far += gain
+        trade_duration_weeks = sequence_counter * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52
-        log_best_result_per_year = log_best_result_so_far / trade_duration_years
-        wallet_after_a_year = exp(log_best_result_per_year)
-        yearly_gain_percent = (wallet_after_a_year - 1.0) * 100  # Wallet value starts at $1.00
-        logging.info(f"Epoch: {epoch + 1}; " +
-                     f"best evaluation: {log_best_result_so_far:.2f}; " +
-                     f"best model's yearly gain: {yearly_gain_percent:.1f}%; " +
-                     f"trades: {trades_count} (of {args.batch} possible)")
+        yearly_gain = gain_so_far / trade_duration_years
+        yearly_gain_percent = yearly_gain * 100
+        logging.info(f"Sequence #{sequence + 1}; " +
+                     f"yearly gain: {yearly_gain_percent:.2f}%; " +
+                     f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
 
 
 if __name__ == "__main__":
