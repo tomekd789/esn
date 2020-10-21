@@ -82,7 +82,9 @@ def main(args):
         logging.info(f"Epoch: {epoch + 1}; " +
                      f"best evaluation: {best_result_so_far:.2f}; " +
                      f"best model's yearly gain: {yearly_gain_percent:.1f}%; " +
-                     f"trades: {trades_count} (of {args.batch} possible)")
+                     f"trades: {trades_count} (of {args.batch} possible); " +
+                     f"model id: {population.start_time_as_string}"
+                     )
 
 
 if __name__ == "__main__":

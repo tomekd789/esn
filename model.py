@@ -1,6 +1,5 @@
 from datetime import datetime
 import logging
-from math import log
 import os
 import random
 
@@ -24,6 +23,44 @@ def _get_mutation_function(mutation_probability):
         return lambda x: x
     else:
         return random.choice(MUTATION_FUNCTIONS)
+
+
+def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss):
+    """
+    Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
+    starting with 1.0 wallet.
+    Note: if trade pointer is at the end of the sequence, the trade is not performed
+    :param sequence: asset prices in the sequential order
+    :param trade_start_pointer: the pointer where the trade actually begins
+    :param trade_type: can be "long" or "short", for buy or sell transactions
+    :param take_profit: multiplier for S/L, e.g. 0.95 means -5%
+    :param stop_loss: can be "long" or "short", for buy or sell transactions
+    :return: gain after trade, bool information if any trade was actually performed
+    """
+    trade_start_price = sequence[trade_start_pointer]
+    # We start this calculation with $1.00 and buy at the trade start price
+    # To simulate continuous trading, we multiply the outcomes from single sequences
+    if trade_start_pointer >= len(sequence):
+        return 0.0, False  # No loss/gain, trade not executed
+    purchased_stocks = 1.0 / trade_start_price
+    sequence_index = trade_start_pointer + 1
+    while sequence_index < len(sequence) - 1:
+        # Check for Take Profit
+        if sequence[sequence_index] >= trade_start_price * take_profit:
+            break
+        # Check for Stop Loss
+        if sequence[sequence_index] <= trade_start_price * stop_loss:
+            break
+        sequence_index += 1
+    trade_close_price = sequence[sequence_index].astype(float)
+    result = purchased_stocks * trade_close_price
+    gain = result - 1.0
+    if trade_type == "short":
+        gain = -gain
+        gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
+    # Throttle profit
+    # gain = min(gain, self.take_profit - 1)
+    return gain, True
 
 
 class Population:
@@ -135,41 +172,6 @@ class Population:
                 self.new_population_biases[second_index][:co_split_index] = saved_left_sequence
                 self.new_population_biases[first_index][co_split_index:] = saved_right_sequence
 
-    def _calculate_trade_outcome(self, sequence, trade_start_pointer, trade_type):
-        """
-        Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
-        starting with 1.0 wallet.
-        Note: if trade pointer is at the end of the sequence, the trade is not performed
-        :param sequence: asset prices in the sequential order
-        :param trade_start_pointer: the pointer where the trade actually begins
-        :param trade_type: can be "long" or "short", for buy or sell transactions
-        :return: gain after trade, bool information if any trade was actually performed
-        """
-        trade_start_price = sequence[trade_start_pointer]
-        # We start this calculation with $1.00 and buy at the trade start price
-        # To simulate continuous trading, we multiply the outcomes from single sequences
-        if trade_start_pointer >= len(sequence):
-            return 0.0, False  # No loss/gain, trade not executed
-        purchased_stocks = 1.0 / trade_start_price
-        sequence_index = trade_start_pointer + 1
-        while sequence_index < len(sequence) - 1:
-            # Check for Take Profit
-            if sequence[sequence_index] >= trade_start_price * self.take_profit:
-                break
-            # Check for Stop Loss
-            if sequence[sequence_index] <= trade_start_price * self.stop_loss:
-                break
-            sequence_index += 1
-        trade_close_price = sequence[sequence_index].astype(float)
-        result = purchased_stocks * trade_close_price
-        gain = result - 1.0
-        if trade_type == "short":
-            gain = -gain
-            gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
-        # Throttle profit
-        # gain = min(gain, self.take_profit - 1)
-        return gain, True
-
     def _evaluate_sequence(self, weights, biases, sequence):
         """
         Evaluate a single sequence
@@ -222,9 +224,9 @@ class Population:
             """                                                                                           """
 
             # The last three state values have a special meaning:
-            #     s[-3]: progress input pointer
+            #     s[-1]: progress input pointer
             #     s[-2]: take long position (buy)
-            #     s[-1] : take short position (sell)
+            #     s[-3] : take short position (sell)
             progress_input = internal_states[:, -1] >= 1.0
             buy_signals = internal_states[:, -2] >= 1.0
             sell_signals = internal_states[:, -3] >= 1.0
@@ -259,7 +261,8 @@ class Population:
                 continue
             trade_start_pointer = int(trade_start_pointers[model_index].item())
             trade_type = "long" if take_long_position[model_index] else "short"
-            trade_outcome, trade_executed = self._calculate_trade_outcome(sequence, trade_start_pointer, trade_type)
+            trade_outcome, trade_executed = calculate_trade_outcome(
+                sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss)
             trades_results[model_index] = trade_outcome
             trades_executed[model_index] = trade_executed
         return trades_results, trades_executed
@@ -345,7 +348,8 @@ class Population:
             self.mutation_probability *= 1.05  # Increase the mutation probability for better exploration
             self.mutation_probability = min(self.mutation_probability, 1.0)
             # self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
-        logging.info(f'New models taken: {new_models_percentage}%; mutation probability: {self.mutation_probability}; cross-over probability: {self.co_probability}')
+        logging.info(f'New models taken: {new_models_percentage}%; ' +
+                     f'mutation probability: {self.mutation_probability}')
         if new_models_percentage == 0:
             self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]
 
@@ -394,7 +398,53 @@ class Model:
         self.data = data
         self.args = args
         weights_file_name = os.path.join(args.load_dir, args.file_prefix + "_weights.pt")
-        biases_file_name = os.path.join(args.load_dir, args.file_prefix + "biases.pt")
+        biases_file_name = os.path.join(args.load_dir, args.file_prefix + "_biases.pt")
         self.weights = torch.load(weights_file_name).to(device)
         self.biases = torch.load(biases_file_name).to(device)
-        # TODO continue
+
+    def evaluate_sequence(self, sequence):
+        """
+        Do model inference for the sequence of prices
+        :param sequence: array of subsequent prices, normalized to start from 1.0
+        :return: gain from $1.0 invested, point of trade start (-1 in case of no trade)
+        """
+        # The "just buy" strategy
+        # trade_outcome, trade_executed = calculate_trade_outcome(
+        #     sequence, 0, "long", self.args.take_profit, self.args.stop_loss)
+        # return trade_outcome, 0
+
+        # Internal state, zero-initialized
+        # Note: this is different than in Population, because we have only one model to evaluate
+        internal_state = torch.zeros(self.weights.size()[0], device=self.device)
+        relu = torch.nn.ReLU()
+        sequence_pointer = 0
+        buy_signal = False
+        sell_signal = False
+        for _ in range(self.args.max_evaluation_steps):
+            # Progress the internal state by the model iteration
+            internal_state[0] = sequence[sequence_pointer].astype(float)
+            internal_state = torch.einsum("n, mn -> m", internal_state, self.weights)
+            internal_state += self.biases
+            internal_state = relu(internal_state)
+
+            # The last three state values have a special meaning:
+            #     s[-1]: progress input pointer
+            #     s[-2]: take long position (buy)
+            #     s[-3] : take short position (sell)
+            progress_input = (internal_state[-1] >= 1.0).item()
+            buy_signal = (internal_state[-2] >= 1.0).item()
+            sell_signal = (internal_state[-3] >= 1.0).item()
+            # Buy and sell signals mutually cancel out
+            if buy_signal and sell_signal:
+                buy_signal = False
+                sell_signal = False
+            if buy_signal or sell_signal:
+                break
+            if progress_input:
+                sequence_pointer += 1
+                if sequence_pointer >= len(sequence):
+                    break
+        trade_type = "long" if buy_signal else "short"
+        trade_outcome, trade_executed = calculate_trade_outcome(
+            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss)
+        return trade_outcome, sequence_pointer if trade_executed else -1

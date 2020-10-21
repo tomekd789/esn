@@ -51,15 +51,16 @@ def main(args):
     gain_so_far = 0.0
     for sequence_counter in range (args.sequences):
         sequence = data.__next__()
-        gain, trade_start_pointer = model.infer(sequence)
+        gain, trade_start_pointer = model.evaluate_sequence(sequence)
         gain_so_far += gain
         trade_duration_weeks = sequence_counter * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52
         yearly_gain = gain_so_far / trade_duration_years
         yearly_gain_percent = yearly_gain * 100
-        logging.info(f"Sequence #{sequence + 1}; " +
-                     f"yearly gain: {yearly_gain_percent:.2f}%; " +
-                     f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
+        if sequence_counter % 1000 == 0:
+            logging.info(f"Sequence {sequence_counter + 1}; " +
+                         f"yearly gain: {yearly_gain_percent:.2f}%; " +
+                         f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
 
 
 if __name__ == "__main__":
