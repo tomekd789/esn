@@ -352,8 +352,8 @@ class Population:
             # self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
         logging.info(f'New models taken: {new_models_percentage}%; ' +
                      f'mutation probability: {self.mutation_probability}')
-        # if new_models_percentage == 0:
-        #     self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]
+        if new_models_percentage == 0:
+            self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]
 
     def _best_model_index(self):
         # There is no argmax for lists in Python(!)
