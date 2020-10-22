@@ -25,7 +25,7 @@ def _get_mutation_function(mutation_probability):
         return random.choice(MUTATION_FUNCTIONS)
 
 
-def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss):
+def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss, just_buy):
     """
     Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
     starting with 1.0 wallet.
@@ -35,6 +35,7 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     :param trade_type: can be "long" or "short", for buy or sell transactions
     :param take_profit: multiplier for S/L, e.g. 0.95 means -5%
     :param stop_loss: can be "long" or "short", for buy or sell transactions
+    :param just_buy: the "just buy" mode to avoid infinite recursive calls
     :return: gain after trade, bool information if any trade was actually performed
     """
     trade_start_price = sequence[trade_start_pointer]
@@ -52,14 +53,15 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
         if sequence[sequence_index] <= trade_start_price * stop_loss:
             break
         sequence_index += 1
-    trade_close_price = sequence[sequence_index].astype(float)
+    trade_close_price = sequence[sequence_index]
     result = purchased_stocks * trade_close_price
     gain = result - 1.0
     if trade_type == "short":
         gain = -gain
         gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
-    # Throttle profit
-    # gain = min(gain, self.take_profit - 1)
+    if not just_buy:
+        gain_with_just_buy, _ = calculate_trade_outcome(sequence, 0, "long", take_profit, stop_loss, True)
+        gain -= gain_with_just_buy
     return gain, True
 
 
@@ -262,7 +264,7 @@ class Population:
             trade_start_pointer = int(trade_start_pointers[model_index].item())
             trade_type = "long" if take_long_position[model_index] else "short"
             trade_outcome, trade_executed = calculate_trade_outcome(
-                sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss)
+                sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss, False)
             trades_results[model_index] = trade_outcome
             trades_executed[model_index] = trade_executed
         return trades_results, trades_executed
@@ -350,8 +352,8 @@ class Population:
             # self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
         logging.info(f'New models taken: {new_models_percentage}%; ' +
                      f'mutation probability: {self.mutation_probability}')
-        if new_models_percentage == 0:
-            self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]
+        # if new_models_percentage == 0:
+        #     self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]
 
     def _best_model_index(self):
         # There is no argmax for lists in Python(!)
@@ -408,11 +410,6 @@ class Model:
         :param sequence: array of subsequent prices, normalized to start from 1.0
         :return: gain from $1.0 invested, point of trade start (-1 in case of no trade)
         """
-        # The "just buy" strategy
-        # trade_outcome, trade_executed = calculate_trade_outcome(
-        #     sequence, 0, "long", self.args.take_profit, self.args.stop_loss)
-        # return trade_outcome, 0
-
         # Internal state, zero-initialized
         # Note: this is different than in Population, because we have only one model to evaluate
         internal_state = torch.zeros(self.weights.size()[0], device=self.device)
@@ -446,5 +443,5 @@ class Model:
                     break
         trade_type = "long" if buy_signal else "short"
         trade_outcome, trade_executed = calculate_trade_outcome(
-            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss)
+            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss, False)
         return trade_outcome, sequence_pointer if trade_executed else -1
