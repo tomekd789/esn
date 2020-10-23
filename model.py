@@ -25,7 +25,7 @@ def _get_mutation_function(mutation_probability):
         return random.choice(MUTATION_FUNCTIONS)
 
 
-def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss, just_buy):
+def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss, just_buy, mode):
     """
     Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
     starting with 1.0 wallet.
@@ -36,13 +36,14 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     :param take_profit: multiplier for S/L, e.g. 0.95 means -5%
     :param stop_loss: can be "long" or "short", for buy or sell transactions
     :param just_buy: the "just buy" mode to avoid infinite recursive calls
+    :param mode: only in the train mode (value "train") the "just buy" value is subtracted
     :return: gain after trade, bool information if any trade was actually performed
     """
-    trade_start_price = sequence[trade_start_pointer]
     # We start this calculation with $1.00 and buy at the trade start price
     # To simulate continuous trading, we multiply the outcomes from single sequences
     if trade_start_pointer >= len(sequence):
         return 0.0, False  # No loss/gain, trade not executed
+    trade_start_price = sequence[trade_start_pointer]
     purchased_stocks = 1.0 / trade_start_price
     sequence_index = trade_start_pointer + 1
     while sequence_index < len(sequence) - 1:
@@ -59,8 +60,8 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     if trade_type == "short":
         gain = -gain
         gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
-    if not just_buy:
-        gain_with_just_buy, _ = calculate_trade_outcome(sequence, 0, "long", take_profit, stop_loss, True)
+    if not just_buy and mode == "train":
+        gain_with_just_buy, _ = calculate_trade_outcome(sequence, 0, "long", take_profit, stop_loss, True, "train")
         gain -= gain_with_just_buy
     return gain, True
 
@@ -264,7 +265,7 @@ class Population:
             trade_start_pointer = int(trade_start_pointers[model_index].item())
             trade_type = "long" if take_long_position[model_index] else "short"
             trade_outcome, trade_executed = calculate_trade_outcome(
-                sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss, False)
+                sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss, False, "train")
             trades_results[model_index] = trade_outcome
             trades_executed[model_index] = trade_executed
         return trades_results, trades_executed
@@ -443,5 +444,5 @@ class Model:
                     break
         trade_type = "long" if buy_signal else "short"
         trade_outcome, trade_executed = calculate_trade_outcome(
-            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss, False)
+            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss, False, "test")
         return trade_outcome, sequence_pointer if trade_executed else -1
