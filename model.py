@@ -25,7 +25,7 @@ def _get_mutation_function(mutation_probability):
         return random.choice(MUTATION_FUNCTIONS)
 
 
-def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss, just_buy, mode):
+def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss):
     """
     Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
     starting with 1.0 wallet.
@@ -60,9 +60,6 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     if trade_type == "short":
         gain = -gain
         gain = max(gain, -1.0)  # I assume that we cannot loose more than we had (is this correct?)
-    if not just_buy and mode == "train":
-        gain_with_just_buy, _ = calculate_trade_outcome(sequence, 0, "long", take_profit, stop_loss, True, "train")
-        gain -= gain_with_just_buy
     return gain, True
 
 
@@ -100,10 +97,6 @@ class Population:
         self._copy_population()
         self._mutate_new_population()
         self._crossing_over_in_new_population()
-        self.new_population_evaluations, self.new_trades_counters = self._evaluate_population(
-            self.new_population_weights,
-            self.new_population_biases,
-            self.data_stream)
 
     def _copy_population(self):
         """
@@ -265,12 +258,12 @@ class Population:
             trade_start_pointer = int(trade_start_pointers[model_index].item())
             trade_type = "long" if take_long_position[model_index] else "short"
             trade_outcome, trade_executed = calculate_trade_outcome(
-                sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss, False, "train")
+                sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss)
             trades_results[model_index] = trade_outcome
             trades_executed[model_index] = trade_executed
         return trades_results, trades_executed
 
-    def _evaluate_population(self, weights, biases, data_stream):
+    def _evaluate_population(self, weights, biases, batch):
         """
         The main evaluation method; takes a population (as weights & biases), the data stream,
         and returns trade values for models in the population
@@ -279,7 +272,6 @@ class Population:
         :param data_stream: the stream of data batches, as lists of numpy arrays
         :return: population-sized list of trade results, list of trade counts actually executed
         """
-        batch = data_stream.__next__()
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
         # The calculations are rather batched along the population dimension, each model being evaluated independently
         accumulated_evaluation = torch.zeros(self.population_size, device=self.device)
@@ -353,8 +345,6 @@ class Population:
             # self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
         logging.info(f'New models taken: {new_models_percentage}%; ' +
                      f'mutation probability: {self.mutation_probability}')
-        if new_models_percentage == 0:
-            self.population_evaluations = [evaluation - 0.5 for evaluation in self.population_evaluations]
 
     def _best_model_index(self):
         # There is no argmax for lists in Python(!)
@@ -367,6 +357,17 @@ class Population:
         """
         # Create a new generation and evaluate it
         self.new_generation()
+        batch = self.data_stream.__next__()
+        # Conceptual change: both populations, old and new, are evaluated using *the same* batch
+        self.population_evaluations, self.trades_counters = self._evaluate_population(
+            self.population_weights,
+            self.population_biases,
+            batch)
+        self.new_population_evaluations, self.new_trades_counters = self._evaluate_population(
+            self.new_population_weights,
+            self.new_population_biases,
+            batch)
+
         # Merge old and new generations, pick the best ones; prefer newer models over old ones
         self._merge_populations()
         best_model_index = self._best_model_index()
@@ -444,5 +445,5 @@ class Model:
                     break
         trade_type = "long" if buy_signal else "short"
         trade_outcome, trade_executed = calculate_trade_outcome(
-            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss, False, "test")
+            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss)
         return trade_outcome, sequence_pointer if trade_executed else -1
