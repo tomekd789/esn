@@ -55,8 +55,8 @@ def main(args):
         gain_so_far += gain
         trade_duration_weeks = (sequence_counter + 1) * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52
-        wallet = max(1.0 + gain_so_far, 0.01)
-        yearly_gain = exp(log(wallet) / trade_duration_years) - 1.0
+        cash = max(1.0 + gain_so_far, 0.01)
+        yearly_gain = exp(log(cash) / trade_duration_years) - 1.0
         yearly_gain_percent = yearly_gain * 100
         if sequence_counter % 1000 == 999:
             logging.info(f"Sequence {sequence_counter + 1}; " +

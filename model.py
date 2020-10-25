@@ -28,7 +28,7 @@ def _get_mutation_function(mutation_probability):
 def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss):
     """
     Calculate the trade outcome for a given prices sequence, moment of start, and position (long or short)
-    starting with 1.0 wallet.
+    starting with 1.0 cash.
     Note: if trade pointer is at the end of the sequence, the trade is not performed
     :param sequence: asset prices in the sequential order
     :param trade_start_pointer: the pointer where the trade actually begins

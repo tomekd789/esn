@@ -77,7 +77,7 @@ def main(args):
         trade_duration_weeks = args.batch * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52
         best_result_per_year = best_result_so_far / trade_duration_years
-        yearly_gain_percent = best_result_per_year * 100  # Wallet value starts at $1.00
+        yearly_gain_percent = best_result_per_year * 100  # Cash starts at $1.00
         population.save(args.save_dir)
         logging.info(f"Epoch: {epoch + 1}; " +
                      f"best evaluation: {best_result_so_far:.2f}; " +

@@ -16,7 +16,7 @@ for i in range(EPOCHS):
         trade_duration_weeks = BATCH * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52
         best_result_per_year = best_result_so_far / trade_duration_years
-        yearly_gain_percent = best_result_per_year * 100  # Wallet value starts at $1.00
+        yearly_gain_percent = best_result_per_year * 100  # Cash starts at $1.00
         if yearly_gain_percent > max_gain:
             max_gain = yearly_gain_percent
     if i in [0, 9, 99, 999, 9999, 99999]:
