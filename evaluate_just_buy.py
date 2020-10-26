@@ -1,14 +1,11 @@
 """
-Run inference on a single ESN model
+Run inference taking the "just buy" strategy at the first ticker value
 
 Example parameters:
     --data /opt/dane_synology/esn_data_100k.csv \
     --sequences 200 \
-    --max_evaluation_steps 10 \
     --take_profit 1.05 \
     --stop_loss 0.95 \
-    --load_dir /home/tdryjanski/esn_model
-    --file_prefix 20201016145331
 
 Meaning of selected parameters:
     --data: path to a file containing two-week minute andromeda trade sequences normalized to start from 1.0
@@ -24,7 +21,6 @@ Meaning of selected parameters:
 import argparse
 import logging
 from math import exp, log
-import os
 
 from data import basic_data_stream
 from model import Model
@@ -36,22 +32,18 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", help="CSV file with training data")
     parser.add_argument("--sequences", type=int, help="Number of samples taken for single evaluation")
-    parser.add_argument("--max_evaluation_steps", type=int, help="Maximum number of evaluation steps")
     parser.add_argument("--take_profit", type=float, help="Take profit: 1.05 means +5%")
     parser.add_argument("--stop_loss", type=float, help="Stop loss: 0.95 means -5%")
-    parser.add_argument("--load_dir", help="Model save directory")
-    parser.add_argument("--file_prefix", help="File names prefix")
     return parser.parse_args()
 
 
 def main(args):
     data = basic_data_stream(args.data)
-    device = 'cpu'
-    model = Model(device, data, args)
     gain_so_far = 0.0
     for sequence_counter in range (args.sequences):
         sequence = data.__next__()
-        gain, trade_start_pointer = model.evaluate_sequence(sequence)
+        gain, trade_start_pointer = Model.evaluate_sequence_with_just_buy_strategy(
+            sequence, args.take_profit, args.stop_loss)
         gain_so_far += gain
         trade_duration_weeks = (sequence_counter + 1) * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52

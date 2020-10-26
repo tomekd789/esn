@@ -447,3 +447,16 @@ class Model:
         trade_outcome, trade_executed = calculate_trade_outcome(
             sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss)
         return trade_outcome, sequence_pointer if trade_executed else -1
+
+    @staticmethod
+    def evaluate_sequence_with_just_buy_strategy(sequence, take_profit, stop_loss):
+        """
+        Do model inference for the sequence of prices assuming the "buy" decision
+        :param sequence: array of subsequent prices, normalized to start from 1.0
+        :param take_profit: take profit value (1.05 == 5%)
+        :param stop_loss: stop loss value (0.95 == -5%)
+        :return: gain from $1.0 invested
+        """
+        trade_outcome, _ = calculate_trade_outcome(
+            sequence, 0, "long", take_profit, stop_loss)
+        return trade_outcome, 0

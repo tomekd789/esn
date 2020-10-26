@@ -17,8 +17,8 @@ Example parameters:
 
 Meaning of selected parameters:
     --data: path to a file containing two-week minute andromeda trade sequences normalized to start from 1.0
-    --batch: number of random trade sequences applied to the model sequentially
-        (we start with $1.00 and apply all the sequences one by one)
+    --sequences: number of random trade sequences applied to the model sequentially but independently
+        (Each sequence starts at $1.0)
     --population: number of models evaluated in parallel
     --model_size: size of the model internal state (aka neuron count)
     --mutation_probability: after a new population is created as a copy of the existing one,
