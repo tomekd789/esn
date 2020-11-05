@@ -58,7 +58,7 @@ def main(args):  # pylint: disable=missing-function-docstring
     trade_data_buffer = {}  # Buffer to accumulate data in memory for future reuse
     with open(args.target, 'w') as target_file_handle:
         target_file_writer = csv.writer(target_file_handle, quoting=csv.QUOTE_MINIMAL)
-        while generated_samples_counter <= args.samples:
+        while generated_samples_counter < args.samples:
             progress_logger()
             ticker = random.choice(all_andromeda_tickers)  # Get a random ticker
             # Populate the trade data buffer with ticker data if not yet exists

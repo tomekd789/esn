@@ -401,8 +401,9 @@ class Model:
         self.device = device
         self.data = data
         self.args = args
-        weights_file_name = os.path.join(args.load_dir, args.file_prefix + "_weights.pt")
-        biases_file_name = os.path.join(args.load_dir, args.file_prefix + "_biases.pt")
+        self.id = args.file_prefix
+        weights_file_name = os.path.join(args.load_dir, self.id + "_weights.pt")
+        biases_file_name = os.path.join(args.load_dir, self.id + "_biases.pt")
         self.weights = torch.load(weights_file_name).to(device)
         self.biases = torch.load(biases_file_name).to(device)
 

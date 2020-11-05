@@ -62,6 +62,7 @@ def main(args):
             logging.info(f"Sequence {sequence_counter + 1}; " +
                          f"yearly gain: {yearly_gain_percent:.2f}%; " +
                          f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
+    logging.info(f'Model ID: {model.id}')
 
 
 if __name__ == "__main__":
