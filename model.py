@@ -6,11 +6,14 @@ import random
 import torch
 
 MUTATION_FUNCTIONS = [
-    lambda x: x / 2,
-    lambda x: x * 2,
+    lambda x: x / 0.999,
+    lambda x: x * 0.999,
     lambda x: x - 0.5,
     lambda x: x + 0.5
 ]
+
+# Number of sequence items presented to the ESN at once
+SEQUENCE_FEED_LENGTH = 10
 
 
 def _get_mutation_function(mutation_probability):
@@ -193,15 +196,18 @@ class Population:
         all_zeros = torch.zeros(self.population_size, device=self.device)
         all_ones = torch.ones(self.population_size, device=self.device)
         # Maximum sequence pointer stored
-        sequence_max_pointer = len(sequence) - 1
+        sequence_max_pointer = len(sequence) - SEQUENCE_FEED_LENGTH
         # Perform RNN steps with all models in parallel (leverage the CUDA SIMD architecture)
         relu = torch.nn.ReLU()
         for _ in range(self.max_evaluation_steps):
-            # For each internal state assign its 0-th element with the sequence value according to sequence pointers
+            # For each internal state assign the first SEQUENCE_FEED_LENGTH elements with the sequence values
+            # according to sequence pointers
             pointers = sequence_pointers.tolist()
             pointers = [min(pointer, sequence_max_pointer) for pointer in pointers]
             for model_index, pointer in enumerate(pointers):
-                internal_states[model_index][0] = sequence[int(pointer)].astype(float)
+                for sequence_feed_index in range(SEQUENCE_FEED_LENGTH):
+                    internal_states[model_index][sequence_feed_index] =\
+                        sequence[int(pointer) + sequence_feed_index].astype(float)
 
             """ ----------------------------------------------------------------------------------------- """
             """                  THE CORE OPERATION.  Efficiency is much in demand here                   """
@@ -244,7 +250,7 @@ class Population:
             trade_start_pointers = torch.where(sell_signals, sequence_pointers, trade_start_pointers)
             # Update progress input
             step_pointers_forward = torch.where(progress_input, all_ones, all_zeros)
-            sequence_pointers += step_pointers_forward
+            sequence_pointers += step_pointers_forward  * SEQUENCE_FEED_LENGTH
             # Terminate the calculations if all trade signals have been switched on
             if is_trade.all():
                 break
@@ -422,7 +428,8 @@ class Model:
         sell_signal = False
         for _ in range(self.args.max_evaluation_steps):
             # Progress the internal state by the model iteration
-            internal_state[0] = sequence[sequence_pointer].astype(float)
+            for sequence_feed_index in range(SEQUENCE_FEED_LENGTH):
+                internal_state[sequence_feed_index] = sequence[sequence_pointer + sequence_feed_index].astype(float)
             internal_state = torch.einsum("n, mn -> m", internal_state, self.weights)
             internal_state += self.biases
             internal_state = relu(internal_state)
@@ -441,8 +448,8 @@ class Model:
             if buy_signal or sell_signal:
                 break
             if progress_input:
-                sequence_pointer += 1
-                if sequence_pointer >= len(sequence):
+                sequence_pointer += SEQUENCE_FEED_LENGTH
+                if sequence_pointer >= len(sequence) - SEQUENCE_FEED_LENGTH:
                     break
         trade_type = "long" if buy_signal else "short"
         trade_outcome, trade_executed = calculate_trade_outcome(
