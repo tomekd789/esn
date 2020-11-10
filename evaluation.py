@@ -49,9 +49,11 @@ def main(args):
     device = 'cpu'
     model = Model(device, data, args)
     cash = 1.0
+    gain_so_far = 0.0  # Just for logging
     for sequence_counter in range (args.sequences):
         sequence = data.__next__()
         gain, trade_start_pointer = model.evaluate_sequence(sequence)
+        gain_so_far += gain
         # I assume we reinvest the cash after closing the position, hence our net income is cash * gain
         cash += cash * gain
         trade_duration_weeks = (sequence_counter + 1) * WEEKS_PER_SEQUENCE
@@ -59,7 +61,7 @@ def main(args):
         yearly_gain = exp(log(cash) / trade_duration_years) - 1.0
         yearly_gain_percent = yearly_gain * 100
         if sequence_counter % 1000 == 999:
-            logging.info(f"Gain: {gain:.3f}, Average gain: {gain_so_far / (sequence_counter + 1):.6f}")
+            logging.info(f"Gain: {gain:.3f}, Average gain from a sequence: {gain_so_far / (sequence_counter + 1):.6f}")
             logging.info(f"Sequence {sequence_counter + 1}; " +
                          f"yearly gain: {yearly_gain_percent:.2f}%; " +
                          f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")

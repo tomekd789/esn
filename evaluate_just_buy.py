@@ -39,15 +39,17 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
 
 def main(args):
     data = basic_data_stream(args.data)
-    gain_so_far = 0.0
+    cash = 1.0
+    gain_so_far = 0.0  # Just for logging
     for sequence_counter in range (args.sequences):
         sequence = data.__next__()
         gain, trade_start_pointer = Model.evaluate_sequence_with_just_buy_strategy(
             sequence, args.take_profit, args.stop_loss)
         gain_so_far += gain
+        # I assume we reinvest the cash after closing the position, hence our net income is cash * gain
+        cash += cash * gain
         trade_duration_weeks = (sequence_counter + 1) * WEEKS_PER_SEQUENCE
         trade_duration_years = trade_duration_weeks / 52
-        cash = max(1.0 + gain_so_far, 0.01)
         yearly_gain = exp(log(cash) / trade_duration_years) - 1.0
         yearly_gain_percent = yearly_gain * 100
         if sequence_counter % 1000 == 999:
