@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import random
@@ -77,13 +78,27 @@ class Population:
         # Zero initialization
         self.population_weights = torch.zeros([self.population_size, self.model_size, self.model_size], device=device)
         self.population_biases = torch.zeros([self.population_size, self.model_size], device=device)
+        self.population_evaluations = torch.zeros(self.population_size)
         self.new_population_weights = None
         self.new_population_biases = None
         self.data_stream = data
-        self.population_evaluations = torch.zeros(self.population_size)
         self.trades_counters = [0] * self.population_size
         self.new_population_evaluations = None
         self.new_trades_counters = None
+        if args.recover:
+            parameters_file_name = os.path.join(args.save_dir, self.id + '_checkpoint_parameters.json')
+            weights_file_name = os.path.join(args.save_dir, self.id + '_weights.pt')
+            biases_file_name = os.path.join(args.save_dir, self.id + '_biases.pt')
+            evaluations_file_name = os.path.join(args.save_dir, self.id + '_evaluations.json')
+            with open(parameters_file_name) as parameters_file:
+                checkpoint_parameters = json.load(parameters_file)
+            if args.population != checkpoint_parameters["population_size"] \
+                    or args.model_size != checkpoint_parameters["model_size"] \
+                    or args.esn_input_size != checkpoint_parameters["esn_input_size"]:
+                raise ValueError("Checkpoint parameters mismatch")
+            self.population_weights = torch.load(weights_file_name)
+            self.population_biases = torch.load(biases_file_name)
+            self.population_evaluations = torch.load(evaluations_file_name)
 
     def new_generation(self):
         """
@@ -373,22 +388,35 @@ class Population:
 
     def save(self, save_path):
         """
-        Saves the best model to the save path. Three files are saved:
-         - weights.pt: tensor of weights
-         - biases.pt: tensor of biases
-         - args.txt: command line arguments as string
-         Timestamp is taken at the program start, and added to file names
+        Saves the population and parameters to the save path. These files are saved:
+        - args.txt: command line arguments
+        - checkpoint_parameters.json: parameters necessary for the checkpoint
+        - weights.pt: tensor of population weights
+        - biases.pt: tensor of population biases
+        - evaluations.json: models' evaluations
+        Population ID is added to file names
         :param save_path: Directory path to save the model
         :return: None
         """
-        best_model_index = self._best_model_index()
+        args_file_name = os.path.join(save_path, self.id + '_args.txt')
+        parameters_file_name = os.path.join(save_path, self.id + '_checkpoint_parameters.json')
         weights_file_name = os.path.join(save_path, self.id + '_weights.pt')
         biases_file_name = os.path.join(save_path, self.id + '_biases.pt')
-        args_file_name = os.path.join(save_path, self.id + '_args.txt')
-        torch.save(self.population_weights[best_model_index], weights_file_name)
-        torch.save(self.population_biases[best_model_index], biases_file_name)
+        evaluations_file_name = os.path.join(save_path, self.id + '_evaluations.json')
+
+        checkpoint_parameters = {
+            "population_size": self.population_size,
+            "model_size": self.model_size,
+            "esn_input_size": self.esn_input_size
+        }
+
         with open(args_file_name, 'w') as args_file:
             args_file.write(str(self.args))
+        with open(parameters_file_name, 'w') as parameters_file:
+            json.dump(checkpoint_parameters, parameters_file)
+        torch.save(self.population_weights, weights_file_name)
+        torch.save(self.population_biases, biases_file_name)
+        torch.save(self.population_evaluations, evaluations_file_name)
 
 
 class Model:
@@ -399,12 +427,24 @@ class Model:
         self.device = device
         self.data = data
         self.args = args
-        self.id = args.file_prefix
-        self.esn_input_size = args.esn_input_size
+        self.max_evaluation_steps = args.max_evaluation_steps
+        self.take_profit = args.take_profit
+        self.stop_loss = args.stop_loss
+        self.id = args.id
+        # Load ESN input size from checkpoint
+        parameters_file_name = os.path.join(args.load_dir, self.id + '_checkpoint_parameters.json')
+        with open(parameters_file_name) as parameters_file:
+            self.esn_input_size = json.load(parameters_file)["esn_input_size"]
+        # Get the best model index from checkpoint
+        evaluations_file_name = os.path.join(args.load_dir, self.id + '_evaluations.json')
+        population_evaluations = torch.load(evaluations_file_name)
+        # There is no argmax in Python(!), hence the workaround
+        best_model_index = max(range(len(population_evaluations)), key=lambda i: population_evaluations[i])
+        # Get weights and biases of the best model
         weights_file_name = os.path.join(args.load_dir, self.id + "_weights.pt")
         biases_file_name = os.path.join(args.load_dir, self.id + "_biases.pt")
-        self.weights = torch.load(weights_file_name).to(device)
-        self.biases = torch.load(biases_file_name).to(device)
+        self.weights = torch.load(weights_file_name)[best_model_index].to(device)
+        self.biases = torch.load(biases_file_name)[best_model_index].to(device)
 
     def evaluate_sequence(self, sequence):
         """

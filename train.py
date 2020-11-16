@@ -45,6 +45,7 @@ WEEKS_PER_SEQUENCE = 2
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
     parser = argparse.ArgumentParser()
     parser.add_argument("--id", help="Experiment ID (a user-defined string)")
+    parser.add_argument("--recover", type=bool, help="Recover from saved checkpoint")
     parser.add_argument("--data", help="CSV file with training data")
     parser.add_argument("--epochs", type=int, help="Training epochs")
     parser.add_argument("--cuda_device", help="CUDA device number (pick one)")

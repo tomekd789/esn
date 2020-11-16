@@ -34,13 +34,13 @@ WEEKS_PER_SEQUENCE = 2
 
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
     parser = argparse.ArgumentParser()
+    parser.add_argument("--id", help="File names prefix")
     parser.add_argument("--data", help="CSV file with training data")
     parser.add_argument("--sequences", type=int, help="Number of samples taken for single evaluation")
     parser.add_argument("--max_evaluation_steps", type=int, help="Maximum number of evaluation steps")
     parser.add_argument("--take_profit", type=float, help="Take profit: 1.05 means +5%")
     parser.add_argument("--stop_loss", type=float, help="Stop loss: 0.95 means -5%")
     parser.add_argument("--load_dir", help="Model save directory")
-    parser.add_argument("--file_prefix", help="File names prefix")
     return parser.parse_args()
 
 
