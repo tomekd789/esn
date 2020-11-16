@@ -53,6 +53,7 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
     parser.add_argument("--model_size", type=int, help="Model size")
     parser.add_argument("--mutation_probability", type=float, help="Mutation probability")
     parser.add_argument("--co_probability", type=float, help="Crossing-over probability")
+    parser.add_argument("--esn_input_size", type=int, help="ESN input size")
     parser.add_argument("--max_evaluation_steps", type=int, help="Maximum number of evaluation steps")
     parser.add_argument("--take_profit", type=float, help="Take profit: 1.05 means +5%")
     parser.add_argument("--stop_loss", type=float, help="Stop loss: 0.95 means -5%")

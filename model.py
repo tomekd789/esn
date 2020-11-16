@@ -11,9 +11,6 @@ MUTATION_FUNCTIONS = [
     lambda x: x + 0.5
 ]
 
-# Number of sequence items presented to the ESN at once
-SEQUENCE_FEED_LENGTH = 10
-
 
 def _get_mutation_function(mutation_probability):
     """
@@ -75,6 +72,7 @@ class Population:
         self.model_size = args.model_size
         self.mutation_probability = args.mutation_probability
         self.co_probability = args.co_probability
+        self.esn_input_size = args.esn_input_size
         self.max_evaluation_steps = args.max_evaluation_steps
         self.take_profit = args.take_profit
         self.stop_loss = args.stop_loss
@@ -193,16 +191,16 @@ class Population:
         all_zeros = torch.zeros(self.population_size, device=self.device)
         all_ones = torch.ones(self.population_size, device=self.device)
         # Maximum sequence pointer stored
-        sequence_max_pointer = len(sequence) - SEQUENCE_FEED_LENGTH
+        sequence_max_pointer = len(sequence) - self.esn_input_size
         # Perform RNN steps with all models in parallel (leverage the CUDA SIMD architecture)
         relu = torch.nn.ReLU()
         for _ in range(self.max_evaluation_steps):
-            # For each internal state assign the first SEQUENCE_FEED_LENGTH elements with the sequence values
+            # For each internal state assign the first self.esn_input_size elements with the sequence values
             # according to sequence pointers
             pointers = sequence_pointers.tolist()
             pointers = [min(pointer, sequence_max_pointer) for pointer in pointers]
             for model_index, pointer in enumerate(pointers):
-                for sequence_feed_index in range(SEQUENCE_FEED_LENGTH):
+                for sequence_feed_index in range(self.esn_input_size):
                     internal_states[model_index][sequence_feed_index] =\
                         sequence[int(pointer) + sequence_feed_index].astype(float)
 
@@ -247,7 +245,7 @@ class Population:
             trade_start_pointers = torch.where(sell_signals, sequence_pointers, trade_start_pointers)
             # Update progress input
             step_pointers_forward = torch.where(progress_input, all_ones, all_zeros)
-            sequence_pointers += step_pointers_forward * SEQUENCE_FEED_LENGTH
+            sequence_pointers += step_pointers_forward * self.esn_input_size
             # Terminate the calculations if all trade signals have been switched on
             if is_trade.all():
                 break
@@ -404,6 +402,7 @@ class Model:
         self.data = data
         self.args = args
         self.id = args.file_prefix
+        self.esn_input_size = args.esn_input_size
         weights_file_name = os.path.join(args.load_dir, self.id + "_weights.pt")
         biases_file_name = os.path.join(args.load_dir, self.id + "_biases.pt")
         self.weights = torch.load(weights_file_name).to(device)
@@ -424,7 +423,7 @@ class Model:
         sell_signal = False
         for _ in range(self.args.max_evaluation_steps):
             # Progress the internal state by the model iteration
-            for sequence_feed_index in range(SEQUENCE_FEED_LENGTH):
+            for sequence_feed_index in range(self.esn_input_size):
                 internal_state[sequence_feed_index] = sequence[sequence_pointer + sequence_feed_index].astype(float)
             internal_state = torch.einsum("n, mn -> m", internal_state, self.weights)
             internal_state += self.biases
@@ -444,8 +443,8 @@ class Model:
             if buy_signal or sell_signal:
                 break
             if progress_input:
-                sequence_pointer += SEQUENCE_FEED_LENGTH
-                if sequence_pointer >= len(sequence) - SEQUENCE_FEED_LENGTH:
+                sequence_pointer += self.esn_input_size
+                if sequence_pointer >= len(sequence) - self.esn_input_size:
                     break
         trade_type = "long" if buy_signal else "short"
         trade_outcome, trade_executed = calculate_trade_outcome(
