@@ -5,10 +5,8 @@ import random
 import torch
 
 MUTATION_FUNCTIONS = [
-    lambda x: x / 0.999,
-    lambda x: x * 0.999,
-    lambda x: x - 0.5,
-    lambda x: x + 0.5
+    lambda x: x / random.uniform(0.999, 1.001),  # Small gradient-like step
+    lambda x: x + random.uniform(-1.0, 1.0)  # Leap
 ]
 
 
