@@ -54,7 +54,7 @@ def main(args):
         yearly_gain_percent = yearly_gain * 100
         if sequence_counter % 1000 == 999:
             logging.info(f"Sequence {sequence_counter + 1}; " +
-                         f"yearly gain: {yearly_gain_percent:.2f}%; " +
+                         # f"yearly gain: {yearly_gain_percent:.2f}%; " +
                          f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
 
 

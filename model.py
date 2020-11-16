@@ -1,4 +1,3 @@
-from datetime import datetime
 import logging
 import os
 import random
@@ -38,8 +37,6 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     :param trade_type: can be "long" or "short", for buy or sell transactions
     :param take_profit: multiplier for S/L, e.g. 0.95 means -5%
     :param stop_loss: can be "long" or "short", for buy or sell transactions
-    :param just_buy: the "just buy" mode to avoid infinite recursive calls
-    :param mode: only in the train mode (value "train") the "just buy" value is subtracted
     :return: gain after trade, bool information if any trade was actually performed
     """
     # We start this calculation with $1.00 and buy at the trade start price
@@ -71,7 +68,7 @@ class Population:
     Implementation of the population of models, with methods to generate and evaluate them
     """
     def __init__(self, device, data, args):
-        self.start_time_as_string = datetime.now().strftime("%Y%m%d%H%M%S")
+        self.id = args.id
         self.device = device
         self.args = args
         self.population_size = args.population
@@ -250,7 +247,7 @@ class Population:
             trade_start_pointers = torch.where(sell_signals, sequence_pointers, trade_start_pointers)
             # Update progress input
             step_pointers_forward = torch.where(progress_input, all_ones, all_zeros)
-            sequence_pointers += step_pointers_forward  * SEQUENCE_FEED_LENGTH
+            sequence_pointers += step_pointers_forward * SEQUENCE_FEED_LENGTH
             # Terminate the calculations if all trade signals have been switched on
             if is_trade.all():
                 break
@@ -275,7 +272,6 @@ class Population:
         and returns trade values for models in the population
         :param weights: array of population models' weights
         :param biases: array of biases
-        :param data_stream: the stream of data batches, as lists of numpy arrays
         :return: population-sized list of trade results, list of trade counts actually executed
         """
         # Note that batch elements are processed sequentially; the name might be counterintuitive for DL practitioners
@@ -390,9 +386,9 @@ class Population:
         :return: None
         """
         best_model_index = self._best_model_index()
-        weights_file_name = os.path.join(save_path, self.start_time_as_string + '_weights.pt')
-        biases_file_name = os.path.join(save_path, self.start_time_as_string + '_biases.pt')
-        args_file_name = os.path.join(save_path, self.start_time_as_string + '_args.txt')
+        weights_file_name = os.path.join(save_path, self.id + '_weights.pt')
+        biases_file_name = os.path.join(save_path, self.id + '_biases.pt')
+        args_file_name = os.path.join(save_path, self.id + '_args.txt')
         torch.save(self.population_weights[best_model_index], weights_file_name)
         torch.save(self.population_biases[best_model_index], biases_file_name)
         with open(args_file_name, 'w') as args_file:

@@ -44,6 +44,7 @@ WEEKS_PER_SEQUENCE = 2
 
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
     parser = argparse.ArgumentParser()
+    parser.add_argument("--id", help="Experiment ID (a user-defined string)")
     parser.add_argument("--data", help="CSV file with training data")
     parser.add_argument("--epochs", type=int, help="Training epochs")
     parser.add_argument("--cuda_device", help="CUDA device number (pick one)")
@@ -83,7 +84,7 @@ def main(args):
                      f"best evaluation: {best_result_so_far:.2f}; " +
                      f"best model's yearly gain: {yearly_gain_percent:.1f}%; " +
                      f"trades: {trades_count} (of {args.batch} possible); " +
-                     f"model id: {population.start_time_as_string}"
+                     f"model id: {population.id}"
                      )
 
 
