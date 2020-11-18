@@ -42,12 +42,14 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     trade_start_price = sequence[trade_start_pointer]
     purchased_stocks = 1.0 / trade_start_price
     sequence_index = trade_start_pointer + 1
+    tp_closing_price = trade_start_price * take_profit
+    sl_closing_price = trade_start_price * stop_loss
     while sequence_index < len(sequence) - 1:
         # Check for Take Profit
-        if sequence[sequence_index] >= trade_start_price * take_profit:
+        if sequence[sequence_index] >= tp_closing_price:
             break
         # Check for Stop Loss
-        if sequence[sequence_index] <= trade_start_price * stop_loss:
+        if sequence[sequence_index] <= sl_closing_price:
             break
         sequence_index += 1
     trade_close_price = sequence[sequence_index]
