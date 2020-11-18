@@ -10,6 +10,7 @@ Example parameters:
     --model_size 5 \
     --mutation_probability 0.001 \
     --co_probability 0.4 \
+    --esn_input_size 20 \
     --max_evaluation_steps 10 \
     --take_profit 1.05 \
     --stop_loss 0.95 \
@@ -25,6 +26,7 @@ Meaning of selected parameters:
         weights and biases are modified randomly with the given probability.
         For mutation functions see model.MUTATION_FUNCTIONS, a random one is picked each time
     --co_probability: after mutations are done, models are mutually crossed-over with the given probability
+    --esn_input_size: size of ESN parallel input (count of subsequent prices from the input sequence processed at once)
     --max_evaluation_steps: max RNN steps allowed. If model does not take a decision during this time, no trade happens
     --take_profit, stop_loss: a model returns starting index in the sequence, and the 'buy' or 'sell' signal
         after that, a box trade is executed till the end of the sequence, with take profit and stop loss set
