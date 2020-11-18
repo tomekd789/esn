@@ -31,8 +31,8 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     :param sequence: asset prices in the sequential order
     :param trade_start_pointer: the pointer where the trade actually begins
     :param trade_type: can be "long" or "short", for buy or sell transactions
-    :param take_profit: multiplier for S/L, e.g. 0.95 means -5%
-    :param stop_loss: can be "long" or "short", for buy or sell transactions
+    :param take_profit: multiplier for T/P, e.g. 1.05 means +5%
+    :param stop_loss: multiplier for S/L, e.g. 0.95 means -5%
     :return: gain after trade, bool information if any trade was actually performed
     """
     # We start this calculation with $1.00 and buy at the trade start price
