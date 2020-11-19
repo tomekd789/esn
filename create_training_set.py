@@ -25,8 +25,7 @@ import os
 import random
 
 from algo_logger import logger
-
-TWO_WEEKS = 5865  # of minute tickers; checked empirically ;)
+from andromeda_utils import TWO_WEEKS, get_all_andromeda_tickers
 
 
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
@@ -36,19 +35,6 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
     parser.add_argument("-y", "--year_since", type=int, help="Starting year")
     parser.add_argument("-t", "--target", help="target file")
     return parser.parse_args()
-
-
-def get_all_andromeda_tickers(andromeda_path):
-    """
-    List all tickers in the given path, unique
-    :param andromeda_path: Path to andromeda files
-    :return: List of all ticker files found there, unique
-    """
-    all_files_in_the_directory = os.listdir(andromeda_path)
-    # Look for the first parts of the names (till '_') and make set of them to remove duplicates
-    tickers = {file_name.split("_")[0] for file_name in all_files_in_the_directory}
-    # Change the set to a list
-    return list(tickers)
 
 
 def main(args):  # pylint: disable=missing-function-docstring

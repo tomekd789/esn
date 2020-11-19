@@ -24,10 +24,8 @@ Meaning of selected parameters:
 import argparse
 import logging
 from math import exp, log
-import os
 
-from data import basic_data_stream
-from model import Model
+from model import Model, get_rest_data
 
 WEEKS_PER_SEQUENCE = 2
 
@@ -35,7 +33,7 @@ WEEKS_PER_SEQUENCE = 2
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
     parser = argparse.ArgumentParser()
     parser.add_argument("--id", help="File names prefix")
-    parser.add_argument("--data", help="CSV file with training data")
+    parser.add_argument("--data_url", help="CSV file with training data")
     parser.add_argument("--sequences", type=int, help="Number of samples taken for single evaluation")
     parser.add_argument("--max_evaluation_steps", type=int, help="Maximum number of evaluation steps")
     parser.add_argument("--take_profit", type=float, help="Take profit: 1.05 means +5%")
@@ -45,13 +43,12 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
 
 
 def main(args):
-    data = basic_data_stream(args.data)
     device = 'cpu'
-    model = Model(device, data, args)
+    model = Model(device, args)
     cash = 1.0
     gain_so_far = 0.0  # Just for logging
     for sequence_counter in range (args.sequences):
-        sequence = data.__next__()
+        sequence = get_rest_data(args.data_url, 1)[0]
         gain, trade_start_pointer = model.evaluate_sequence(sequence)
         gain_so_far += gain
         # I assume we reinvest the cash after closing the position, hence our net income is cash * gain

@@ -3,6 +3,7 @@ import logging
 import os
 import random
 
+import requests
 import torch
 
 MUTATION_FUNCTIONS = [
@@ -61,11 +62,15 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
     return gain, True
 
 
+def get_rest_data(data_url, batch_size):
+    return [json.loads(requests.get(data_url).text) for _ in range(batch_size)]
+
+
 class Population:
     """
     Implementation of the population of models, with methods to generate and evaluate them
     """
-    def __init__(self, device, data, args):
+    def __init__(self, device, args):
         self.id = args.id
         self.device = device
         self.args = args
@@ -83,10 +88,12 @@ class Population:
         self.population_evaluations = torch.zeros(self.population_size)
         self.new_population_weights = None
         self.new_population_biases = None
-        self.data_stream = data
+        self.data_url = args.data_url
+        self.batch = args.batch
         self.trades_counters = [0] * self.population_size
         self.new_population_evaluations = None
         self.new_trades_counters = None
+        # Recovery from checkpoint; weights, biases, and current evaluations are overwritten with saved values
         if args.recover:
             parameters_file_name = os.path.join(args.save_dir, self.id + '_checkpoint_parameters.json')
             weights_file_name = os.path.join(args.save_dir, self.id + '_weights.pt')
@@ -113,7 +120,7 @@ class Population:
 
     def _copy_population(self):
         """
-        Create a copy of the existing population; it will be randomly modified and ten evaluated
+        Create a copy of the existing population; it will be randomly modified and then evaluated
         :return: None
         """
         self.new_population_weights = self.population_weights.clone()
@@ -121,7 +128,7 @@ class Population:
 
     def _mutate_new_population(self):
         """
-        Mutate new population randomly, by increasing or decreasing by a small value
+        Mutate new population randomly
         Note: this code does not need to be very efficient, it will not be run frequently
         :return: None
         """
@@ -217,7 +224,7 @@ class Population:
             for model_index, pointer in enumerate(pointers):
                 for sequence_feed_index in range(self.esn_input_size):
                     internal_states[model_index][sequence_feed_index] =\
-                        sequence[int(pointer) + sequence_feed_index].astype(float)
+                        sequence[int(pointer) + sequence_feed_index]
 
             """ ----------------------------------------------------------------------------------------- """
             """                  THE CORE OPERATION.  Efficiency is much in demand here                   """
@@ -372,7 +379,8 @@ class Population:
         """
         # Create a new generation and evaluate it
         self.new_generation()
-        batch = self.data_stream.__next__()
+        # Get batch of random sequences from the REST data service
+        batch = get_rest_data(self.data_url, self.batch)
         # Conceptual change: both populations, old and new, are evaluated using *the same* batch
         self.population_evaluations, self.trades_counters = self._evaluate_population(
             self.population_weights,
@@ -425,9 +433,8 @@ class Model:
     """
     The class for a single model, for inference / evaluation
     """
-    def __init__(self, device, data, args):
+    def __init__(self, device, args):
         self.device = device
-        self.data = data
         self.args = args
         self.max_evaluation_steps = args.max_evaluation_steps
         self.take_profit = args.take_profit
@@ -464,7 +471,7 @@ class Model:
         for _ in range(self.args.max_evaluation_steps):
             # Progress the internal state by the model iteration
             for sequence_feed_index in range(self.esn_input_size):
-                internal_state[sequence_feed_index] = sequence[sequence_pointer + sequence_feed_index].astype(float)
+                internal_state[sequence_feed_index] = sequence[sequence_pointer + sequence_feed_index]
             internal_state = torch.einsum("n, mn -> m", internal_state, self.weights)
             internal_state += self.biases
             internal_state = relu(internal_state)

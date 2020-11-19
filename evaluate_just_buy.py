@@ -8,7 +8,7 @@ Example parameters:
     --stop_loss 0.95 \
 
 Meaning of selected parameters:
-    --data: path to a file containing two-week minute andromeda trade sequences normalized to start from 1.0
+    --data_url http://127.0.0.1:5000/sequence - see "Flask service" in README.md
     --sequences: number of random trade sequences applied to the model sequentially but independently
         (Each sequence starts at $1.0)
     --max_evaluation_steps: max RNN steps allowed. If model does not take a decision during this time, no trade happens
@@ -22,15 +22,14 @@ import argparse
 import logging
 from math import exp, log
 
-from data import basic_data_stream
-from model import Model
+from model import Model, get_rest_data
 
 WEEKS_PER_SEQUENCE = 2
 
 
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", help="CSV file with training data")
+    parser.add_argument("--data_url", help="CSV file with training data")
     parser.add_argument("--sequences", type=int, help="Number of samples taken for single evaluation")
     parser.add_argument("--take_profit", type=float, help="Take profit: 1.05 means +5%")
     parser.add_argument("--stop_loss", type=float, help="Stop loss: 0.95 means -5%")
@@ -38,11 +37,10 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
 
 
 def main(args):
-    data = basic_data_stream(args.data)
     cash = 1.0
     gain_so_far = 0.0  # Just for logging
     for sequence_counter in range (args.sequences):
-        sequence = data.__next__()
+        sequence = get_rest_data(args.data_url, 1)[0]
         gain, trade_start_pointer = Model.evaluate_sequence_with_just_buy_strategy(
             sequence, args.take_profit, args.stop_loss)
         gain_so_far += gain
@@ -53,8 +51,9 @@ def main(args):
         yearly_gain = exp(log(cash) / trade_duration_years) - 1.0
         yearly_gain_percent = yearly_gain * 100
         if sequence_counter % 1000 == 999:
+            logging.info(f"Gain: {gain:.3f}, Average gain from a sequence: {gain_so_far / (sequence_counter + 1):.6f}")
             logging.info(f"Sequence {sequence_counter + 1}; " +
-                         # f"yearly gain: {yearly_gain_percent:.2f}%; " +
+                         f"yearly gain: {yearly_gain_percent:.2f}%; " +
                          f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
 
 

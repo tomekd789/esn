@@ -2,7 +2,7 @@
 Train the ESN model
 
 Example parameters:
-    --data /opt/dane_synology/esn_data_100k.csv \
+    --data_url http://127.0.0.1:5000/sequence \
     --epochs 100 \
     --cuda_device 3 \
     --batch 200 \
@@ -17,7 +17,7 @@ Example parameters:
     --save_dir /home/tdryjanski/esn_model
 
 Meaning of selected parameters:
-    --data: path to a file containing two-week minute andromeda trade sequences normalized to start from 1.0
+    --data_url: see "Flask service" in README.md
     --sequences: number of random trade sequences applied to the model sequentially but independently
         (Each sequence starts at $1.0)
     --population: number of models evaluated in parallel
@@ -35,10 +35,8 @@ Meaning of selected parameters:
 """
 import argparse
 import logging
-from math import exp, log
 import os
 
-from data import data_stream
 from model import Population
 
 WEEKS_PER_SEQUENCE = 2
@@ -48,7 +46,7 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
     parser = argparse.ArgumentParser()
     parser.add_argument("--id", help="Experiment ID (a user-defined string)")
     parser.add_argument("--recover", type=bool, help="Recover from saved checkpoint")
-    parser.add_argument("--data", help="CSV file with training data")
+    parser.add_argument("--data_url", help="REST server for training data")
     parser.add_argument("--epochs", type=int, help="Training epochs")
     parser.add_argument("--cuda_device", help="CUDA device number (pick one)")
     parser.add_argument("--batch", type=int, help="Number of samples taken for single evaluation")
@@ -68,13 +66,12 @@ def main(args):
     args_as_string = "\n    --" + str(args).replace("Namespace(", "").replace(")", "").replace(", ", "\n    --")
     args_as_string = args_as_string.replace("=", " ")
     logging.info(f"Training started; arguments: {args_as_string}")
-    data = data_stream(args.data, args.batch)
     if args.cuda_device:
         device = 'cuda'
         os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
     else:
         device = 'cpu'
-    population = Population(device, data, args)
+    population = Population(device, args)
     for epoch in range(args.epochs):
         best_result_so_far, trades_count = population.train()
         # best_result_so_far is $s loss/gain from $1.00, summed by the batch sequence
