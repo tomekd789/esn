@@ -53,7 +53,8 @@ def main(args):
         if sequence_counter % 1000 == 999:
             # logging.info(f"Gain: {gain:.3f}, Average gain from sequence: {gain_so_far / (sequence_counter + 1):.6f}")
             logging.info(f"Sequence {sequence_counter + 1}; " +
-                         f"yearly gain: {yearly_gain_percent:.2f}%; " +
+                         f"Y/Y gain: {yearly_gain_percent:.2f}%; " +
+                         f"Avg gain from sequence: {gain_so_far / (sequence_counter + 1):.6f}; " +
                          f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
 
 

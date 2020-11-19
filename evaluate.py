@@ -59,10 +59,11 @@ def main(args):
         yearly_gain_percent = yearly_gain * 100
         if sequence_counter % 1000 == 999:
             # logging.info(f"Gain: {gain:.3f}, Average gain from sequence: {gain_so_far / (sequence_counter + 1):.6f}")
-            logging.info(f"Sequence {sequence_counter + 1}; " +
-                         f"yearly gain: {yearly_gain_percent:.2f}%; " +
-                         f"trade start point: {trade_start_pointer} (of {len(sequence)} possible)")
-    logging.info(f'Model ID: {model.id}')
+            logging.info(f"Seq {sequence_counter + 1}; " +
+                         f"Y/Y gain: {yearly_gain_percent:.2f}%; " +
+                         f"Avg gain from sequence: {gain_so_far / (sequence_counter + 1):.6f}; " +
+                         f"trade start point: {trade_start_pointer} (of {len(sequence)} possible); " +
+                         f"Model ID: {model.id}")
 
 
 if __name__ == "__main__":
