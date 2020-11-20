@@ -455,14 +455,7 @@ class Model:
         self.weights = torch.load(weights_file_name)[best_model_index].to(device)
         self.biases = torch.load(biases_file_name)[best_model_index].to(device)
 
-    def evaluate_sequence(self, sequence):
-        """
-        Do model inference for the sequence of prices
-        :param sequence: array of subsequent prices, normalized to start from 1.0
-        :return: gain from $1.0 invested, point of trade start (-1 in case of no trade)
-        """
-        # Internal state, zero-initialized
-        # Note: this is different than in Population, because we have only one model to evaluate
+    def infer(self, sequence):
         internal_state = torch.zeros(self.weights.size()[0], device=self.device)
         relu = torch.nn.ReLU()
         sequence_pointer = 0
@@ -493,10 +486,28 @@ class Model:
                 sequence_pointer += self.esn_input_size
                 if sequence_pointer >= len(sequence) - self.esn_input_size:
                     break
-        trade_type = "long" if buy_signal else "short"
-        trade_outcome, trade_executed = calculate_trade_outcome(
-            sequence, sequence_pointer, trade_type, self.args.take_profit, self.args.stop_loss)
-        return trade_outcome, sequence_pointer if trade_executed else -1
+        if buy_signal:
+            trade = "buy"
+        elif sell_signal:
+            trade = "sell"
+        else:
+            trade = "none"
+        return trade, sequence_pointer
+
+    def evaluate_sequence(self, sequence):
+        """
+        Do model inference for the sequence of prices
+        :param sequence: array of subsequent prices, normalized to start from 1.0
+        :return: gain from $1.0 invested, point of trade start (-1 in case of no trade)
+        """
+        # Internal state, zero-initialized
+        # Note: this is different than in Population, because we have only one model to evaluate
+        trade, start_point = self.infer(sequence)
+        if trade != "none":
+            trade_outcome, trade_executed = calculate_trade_outcome(
+                sequence, start_point, trade, self.args.take_profit, self.args.stop_loss)
+            return trade_outcome, start_point if trade_executed else -1
+        return 0.0, -1
 
     @staticmethod
     def evaluate_sequence_with_just_buy_strategy(sequence, take_profit, stop_loss):

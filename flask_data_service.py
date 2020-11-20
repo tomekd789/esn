@@ -1,16 +1,8 @@
 """
 Flask service for providing random trade sequences, normalized
-Run:
-/opt/anaconda3/envs/algopolis/bin/python3 <path to the ESN project>/esn/flask_data_service.py \
-    --andromeda /opt/dane/ssd/data_cache/andromedanew_adjusted/
-    --year_since 2017
-    --sequence_len 5865
-
-Test from CLI:
-curl -X GET http://127.0.0.1:5000/sequence
-
 It returns a random sequence normalized to start from 1.0 value from a random andromeda ticker
-5865 is roughly two weeks of minute ticks
+
+See example_for_framework.py for usage details
 """
 import argparse
 import flask

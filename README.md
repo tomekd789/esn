@@ -1,4 +1,4 @@
-###Flask service
+###Flask data service
 Run:
 ```bash
 /opt/anaconda3/envs/algopolis/bin/python3 <path to the ESN project>/esn/flask_data_service.py \
@@ -10,6 +10,10 @@ Test from CLI:
 `curl -X GET http://127.0.0.1:5000/sequence`
 It returns a random sequence normalized to start from 1.0 value from a random andromeda ticker
 5865 is roughly two weeks of minute ticks
+
+###Flask predictor service
+Test from CLI:
+`curl -i -H "Content-Type: application/json" -X POST -d '["abc"]' http://localhost:5100/predict`
 
 ###Creating training file
 `/opt/anaconda3/envs/algopolis/bin/python3 /home/tdryjanski/projects/esn/create_training_set.py --andromeda /opt/dane/ssd/data_cache/andromeda_adjusted_new --year_since 2017 --samples 100_000 --target /opt/dane_synology/tdryjanski/<file name>.csv`
