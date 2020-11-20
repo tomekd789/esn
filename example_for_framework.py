@@ -55,9 +55,7 @@ while True:
     headers = {'Content-Type': 'application/json', 'Accept':'application/json'}
     result = requests.post(url="http://localhost:5100/predict", data=sequence, headers=headers)
     trade, index = json.loads(result.text)
-    # if trade == "none":
-    #     print("Do nothing")
-    # else:
-    #     print(f"{trade} at position {index}")
-    if trade != "buy" or index != 40:
-        print(trade, index)
+    if trade == "none":
+        print("Do nothing")
+    else:
+        print(f"{trade} at position {index}")
