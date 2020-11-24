@@ -1,5 +1,9 @@
-import numpy as np
-import pandas as pd
+"""
+Classes to handle locally cached data stream
+Now made obsolete by the flask service
+"""
+import numpy as np  # pylint: disable=import-error
+import pandas as pd  # pylint: disable=import-error
 
 
 def basic_data_stream(data_file):

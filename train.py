@@ -64,10 +64,10 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
     return parser.parse_args()
 
 
-def main(args):
+def main(args):  # pylint: disable=missing-function-docstring
     args_as_string = "\n    --" + str(args).replace("Namespace(", "").replace(")", "").replace(", ", "\n    --")
     args_as_string = args_as_string.replace("=", " ")
-    logging.info(f"Training started; arguments: {args_as_string}")
+    logging.info("Training started; arguments: %s", args_as_string)
     if args.cuda_device:
         device = 'cuda'
         os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device

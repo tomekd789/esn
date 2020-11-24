@@ -1,3 +1,6 @@
+"""
+Utils for handling the Andromeda universe
+"""
 import os
 
 TWO_WEEKS = 5865  # of minute tickers; checked empirically ;)

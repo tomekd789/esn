@@ -5,9 +5,10 @@ It returns a random sequence normalized to start from 1.0 value from a random an
 See example_for_framework.py for usage details
 """
 import argparse
-import flask
 import os
 import random
+
+import flask  # pylint: disable=import-error
 
 from andromeda_utils import get_all_andromeda_tickers
 
@@ -17,11 +18,19 @@ app.config["DEBUG"] = True
 
 @app.route('/', methods=['GET'])
 def home():
+    """
+    Default endpoint; return service information
+    :return: None
+    """
     return "<h1>Andromeda data service</h1><p>Returns a random two-week sequence from Andromeda 450, normalized.</p>"
 
 
 @app.route('/sequence', methods=['GET'])
 def get_sequence():
+    """
+    Return a random sequence from the universe using a local cache
+    :return: None
+    """
     while True:
         ticker = random.choice(all_andromeda_tickers)  # Get a random ticker
         # Populate the trade data buffer with ticker data if not yet exists

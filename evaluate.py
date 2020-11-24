@@ -42,12 +42,12 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
     return parser.parse_args()
 
 
-def main(args):
+def main(args):  # pylint: disable=missing-function-docstring
     device = 'cpu'
     model = Model(device, args)
     cash = 1.0
     gain_so_far = 0.0  # Just for logging
-    for sequence_counter in range (args.sequences):
+    for sequence_counter in range(args.sequences):
         sequence = get_rest_data(args.data_url, 1)[0]
         gain, trade_start_pointer = model.evaluate_sequence(sequence)
         gain_so_far += gain

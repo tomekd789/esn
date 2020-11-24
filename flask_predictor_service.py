@@ -4,9 +4,9 @@ Flask service for providing trade prediction for a sequence
 Returns
 """
 import argparse
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify  # pylint: disable=import-error
 
-from model import Model, get_rest_data
+from model import Model
 
 app = Flask(__name__)
 app.config["DEBUG"] = True
@@ -14,11 +14,19 @@ app.config["DEBUG"] = True
 
 @app.route('/', methods=['GET'])
 def home():
+    """
+    Default endpoint; return service information
+    :return: None
+    """
     return "<h1>ESN Predictor</h1><p>Returns a trade prediction given a sequence.</p>"
 
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    """
+    Returns the model prediction (trade type & start point) given a sequence
+    :return: None
+    """
     sequence = request.json
     if len(sequence) < model.esn_input_size:
         return "Input sequence to short\n", 400
@@ -46,6 +54,6 @@ def parse_command_line_arguments():  # pylint: disable=missing-function-docstrin
 
 if __name__ == "__main__":
     args = parse_command_line_arguments()
-    device = 'cpu'
-    model = Model(device, args)
-    app.run(port = 5100)
+    DEVICE = 'cpu'
+    model = Model(DEVICE, args)
+    app.run(port=5100)

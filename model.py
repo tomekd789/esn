@@ -1,10 +1,13 @@
+"""
+Classes for serving a models' population and a single model
+"""
 import json
 import logging
 import os
 import random
 
 import requests
-import torch
+import torch  # pylint: disable=import-error
 
 MUTATION_FUNCTIONS = [
     lambda x: x / random.uniform(0.999, 1.001),  # Small gradient-like step
@@ -20,8 +23,7 @@ def _get_mutation_function(mutation_probability):
     """
     if random.random() > mutation_probability:
         return lambda x: x
-    else:
-        return random.choice(MUTATION_FUNCTIONS)
+    return random.choice(MUTATION_FUNCTIONS)
 
 
 def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_profit, stop_loss):
@@ -63,15 +65,21 @@ def calculate_trade_outcome(sequence, trade_start_pointer, trade_type, take_prof
 
 
 def get_rest_data(data_url, batch_size):
+    """
+    Reach the data provider service and collect a batch of sequences
+    :param data_url: data provider service URL
+    :param batch_size: number of sequences to return
+    :return: batch-sized list of sequences as lists of floats
+    """
     return [json.loads(requests.get(data_url).text) for _ in range(batch_size)]
 
 
-class Population:
+class Population:  # pylint: disable=too-many-instance-attributes
     """
     Implementation of the population of models, with methods to generate and evaluate them
     """
     def __init__(self, device, args):
-        self.id = args.id
+        self.id = args.id  # pylint: disable=invalid-name
         self.device = device
         self.args = args
         self.population_size = args.population
@@ -97,7 +105,7 @@ class Population:
         recover = args.recover
         if recover:
             recover = recover.upper()
-            assert recover == "YES" or recover == "NO"
+            assert recover in ['YES', 'NO']
         else:
             recover = "NO"
         if recover == "YES":
@@ -194,7 +202,7 @@ class Population:
                 self.new_population_biases[second_index][:co_split_index] = saved_left_sequence
                 self.new_population_biases[first_index][co_split_index:] = saved_right_sequence
 
-    def _evaluate_sequence(self, weights, biases, sequence):
+    def _evaluate_sequence(self, weights, biases, sequence):  # pylint: disable=too-many-locals
         """
         Evaluate a single sequence
         :param weights: population models' weights
@@ -232,9 +240,9 @@ class Population:
                     internal_states[model_index][sequence_feed_index] =\
                         sequence[int(pointer) + sequence_feed_index]
 
-            """ ----------------------------------------------------------------------------------------- """
-            """                  THE CORE OPERATION.  Efficiency is much in demand here                   """
-            """ ----------------------------------------------------------------------------------------- """
+            #   -----------------------------------------------------------------------------------------   #
+            #                    THE CORE OPERATION.  Efficiency is much in demand here                     #
+            #   -----------------------------------------------------------------------------------------   #
             # Scalar multiply internal states by corresponding models,
             # Option 1: the Einstein summation convention abstraction
             internal_states = torch.einsum("bn, bmn -> bm", internal_states, weights)
@@ -246,7 +254,7 @@ class Population:
             internal_states += biases
             # and do the ReLU (important!)
             internal_states = relu(internal_states)
-            """                                                                                           """
+            #                                           (till here)                                         #
 
             # The last three state values have a special meaning:
             #     s[-1]: progress input pointer
@@ -307,11 +315,11 @@ class Population:
         for sequence in batch:
             sequence_evaluation, trades_executed = self._evaluate_sequence(weights, biases, sequence)
             accumulated_evaluation += sequence_evaluation
-            for i in range(len(trades_executed_counters)):
-                trades_executed_counters[i] += 1 if trades_executed[i] else 0
+            for i, trade_executed in enumerate(trades_executed):
+                trades_executed_counters[i] += 1 if trade_executed else 0
         return accumulated_evaluation.tolist(), trades_executed_counters
 
-    def _merge_populations(self):
+    def _merge_populations(self):  # pylint: disable=too-many-locals
         """
         Merge the two populations (old and new) reducing the size by half; update evaluations
         Apply non-conservative approach: prefer newer models if the evaluation equals
@@ -435,7 +443,7 @@ class Population:
         torch.save(self.population_evaluations, evaluations_file_name)
 
 
-class Model:
+class Model:  # pylint: disable=too-many-instance-attributes
     """
     The class for a single model, for inference / evaluation
     """
@@ -445,7 +453,7 @@ class Model:
         self.max_evaluation_steps = args.max_evaluation_steps
         self.take_profit = args.take_profit
         self.stop_loss = args.stop_loss
-        self.id = args.id
+        self.id = args.id  # pylint: disable=invalid-name
         # Load ESN input size from checkpoint
         parameters_file_name = os.path.join(args.load_dir, self.id + '_checkpoint_parameters.json')
         with open(parameters_file_name) as parameters_file:
@@ -462,6 +470,11 @@ class Model:
         self.biases = torch.load(biases_file_name)[best_model_index].to(device)
 
     def infer(self, sequence):
+        """
+        Run inference on the sequence
+        :param sequence: tickers, float, normalized to start at 1.0 value
+        :return: trade direction ("buy" or "sell"), trade start point
+        """
         internal_state = torch.zeros(self.weights.size()[0], device=self.device)
         relu = torch.nn.ReLU()
         sequence_pointer = 0
