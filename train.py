@@ -2,6 +2,8 @@
 Train the ESN model
 
 Example parameters:
+    --id model_id
+    --recover no
     --data_url http://127.0.0.1:5000/sequence \
     --epochs 100 \
     --cuda_device 3 \
@@ -45,7 +47,7 @@ WEEKS_PER_SEQUENCE = 2
 def parse_command_line_arguments():  # pylint: disable=missing-function-docstring
     parser = argparse.ArgumentParser()
     parser.add_argument("--id", help="Experiment ID (a user-defined string)")
-    parser.add_argument("--recover", type=bool, help="Recover from saved checkpoint")
+    parser.add_argument("--recover", help="Recover from saved checkpoint (yes/no; default no)")
     parser.add_argument("--data_url", help="REST server for training data")
     parser.add_argument("--epochs", type=int, help="Training epochs")
     parser.add_argument("--cuda_device", help="CUDA device number (pick one)")

@@ -94,7 +94,13 @@ class Population:
         self.new_population_evaluations = None
         self.new_trades_counters = None
         # Recovery from checkpoint; weights, biases, and current evaluations are overwritten with saved values
-        if args.recover:
+        recover = args.recover
+        if recover:
+            recover = recover.upper()
+            assert recover == "YES" or recover == "NO"
+        else:
+            recover = "NO"
+        if recover == "YES":
             parameters_file_name = os.path.join(args.save_dir, self.id + '_checkpoint_parameters.json')
             weights_file_name = os.path.join(args.save_dir, self.id + '_weights.pt')
             biases_file_name = os.path.join(args.save_dir, self.id + '_biases.pt')
