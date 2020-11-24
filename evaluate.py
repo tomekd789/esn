@@ -47,6 +47,8 @@ def main(args):  # pylint: disable=missing-function-docstring
     model = Model(device, args)
     cash = 1.0
     gain_so_far = 0.0  # Just for logging
+    # Note that some of this code is duplicated in evaluate_just_buy.py
+    # If a fix is done here, it should be also repeated there - or do refactor
     for sequence_counter in range(args.sequences):
         sequence = get_rest_data(args.data_url, 1)[0]
         gain, trade_start_pointer = model.evaluate_sequence(sequence)
