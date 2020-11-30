@@ -292,7 +292,7 @@ class Population:  # pylint: disable=too-many-instance-attributes
             # If no trade was signalled, keep the existing value, i.e. 0.0
             if not is_trade[model_index]:
                 continue
-            trade_start_pointer = int(trade_start_pointers[model_index].item())
+            trade_start_pointer = int(trade_start_pointers[model_index].item()) + self.esn_input_size
             trade_type = "long" if take_long_position[model_index] else "short"
             trade_outcome, trade_executed = calculate_trade_outcome(
                 sequence, trade_start_pointer, trade_type, self.take_profit, self.stop_loss)
@@ -511,7 +511,7 @@ class Model:  # pylint: disable=too-many-instance-attributes
             trade = "sell"
         else:
             trade = "none"
-        return trade, sequence_pointer
+        return trade, sequence_pointer + self.esn_input_size
 
     def evaluate_sequence(self, sequence):
         """
