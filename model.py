@@ -78,10 +78,11 @@ class Population:  # pylint: disable=too-many-instance-attributes
     """
     Implementation of the population of models, with methods to generate and evaluate them
     """
-    def __init__(self, device, args):
+    def __init__(self, device, args, args_as_string):
         self.id = args.id  # pylint: disable=invalid-name
         self.device = device
         self.args = args
+        self.args_as_string = args_as_string
         self.population_size = args.population
         self.model_size = args.model_size
         self.mutation_probability = args.mutation_probability
@@ -435,7 +436,7 @@ class Population:  # pylint: disable=too-many-instance-attributes
         }
 
         with open(args_file_name, 'w') as args_file:
-            args_file.write(str(self.args))
+            args_file.write(str(self.args_as_string))
         with open(parameters_file_name, 'w') as parameters_file:
             json.dump(checkpoint_parameters, parameters_file)
         torch.save(self.population_weights, weights_file_name)

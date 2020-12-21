@@ -73,7 +73,7 @@ def main(args):  # pylint: disable=missing-function-docstring
         os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
     else:
         device = 'cpu'
-    population = Population(device, args)
+    population = Population(device, args, args_as_string)
     for epoch in range(args.epochs):
         best_result_so_far, trades_count = population.train()
         # best_result_so_far is $s loss/gain from $1.00, summed by the batch sequence
