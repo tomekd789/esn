@@ -14,6 +14,8 @@ MUTATION_FUNCTIONS = [
     lambda x: x + random.uniform(-1.0, 1.0)  # Leap
 ]
 
+MAX_MUTATION_PROBABILITY = 0.01
+
 
 def _get_mutation_function(mutation_probability):
     """
@@ -85,7 +87,7 @@ class Population:  # pylint: disable=too-many-instance-attributes
         self.args_as_string = args_as_string
         self.population_size = args.population
         self.model_size = args.model_size
-        self.mutation_probability = args.mutation_probability
+        self.mutation_probability = min(args.mutation_probability, MAX_MUTATION_PROBABILITY)
         self.co_probability = args.co_probability
         self.esn_input_size = args.esn_input_size
         self.max_evaluation_steps = args.max_evaluation_steps
@@ -378,7 +380,7 @@ class Population:  # pylint: disable=too-many-instance-attributes
             # self.co_probability *= 0.95  # Decrease the cross-over probability for better stability
         else:
             self.mutation_probability *= 1.05  # Increase the mutation probability for better exploration
-            self.mutation_probability = min(self.mutation_probability, 1.0)
+            self.mutation_probability = min(self.mutation_probability, MAX_MUTATION_PROBABILITY)
             # self.co_probability *= 1.05  # Increase the cross-over probability for better exploration
         logging.info(f'New models taken: {new_models_percentage}%; ' +
                      f'mutation probability: {self.mutation_probability}')
